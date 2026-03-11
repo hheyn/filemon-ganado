@@ -1,0 +1,10 @@
+{
+  "files": {
+    "main.js": "/filemon-ganado/static/js/main.d89b5c4d.js",
+    "index.html": "/filemon-ganado/index.html",
+    "main.d89b5c4d.js.map": "/filemon-ganado/static/js/main.d89b5c4d.js.map"
+  },
+  "entrypoints": [
+    "static/js/main.d89b5c4d.js"
+  ]
+}

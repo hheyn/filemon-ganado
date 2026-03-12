@@ -356,10 +356,10 @@ export default function App() {
       <div className="app-bg">
         <div className="header">
           <div className="header-inner">
-            <span className="header-icon">🐄</span>
+            <img src="logo.png" alt="Estancia Filemón" style={{height:52,width:52,borderRadius:"50%",objectFit:"cover",boxShadow:"0 2px 8px rgba(0,0,0,.5)"}}/>
             <div>
               <div className="header-title">Estancia Filemón</div>
-              <div className="header-sub">Gestión bovina · Corzuela, Chaco</div>
+              <div className="header-sub">Gestión bovina · Ayolas, Paraguay</div>
             </div>
             <div className="header-stats">
               <div className="hstat"><div className="hstat-num">{animales.length}</div><div className="hstat-lbl">Cabezas</div></div>
@@ -489,22 +489,37 @@ function Dashboard({animales,iatf,pariciones,bajas,sanidad,potreros,setTab}) {
 }
 
 // ─── HACIENDA ─────────────────────────────────────────────────────────────────
+const MODAL_STYLE = `
+  .modal-overlay{position:fixed;inset:0;background:rgba(44,26,14,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;}
+  .modal-box{background:linear-gradient(145deg,#fffdf5,#EDE0C4);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(44,26,14,.5);position:relative;}
+  .modal-title{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:#6B4226;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid rgba(107,66,38,.15);}
+  .modal-close{position:absolute;top:12px;right:12px;background:rgba(107,66,38,.1);border:none;font-size:16px;cursor:pointer;color:#6B4226;padding:4px 8px;border-radius:6px;}
+  .error-msg{background:rgba(176,58,46,.1);border:1px solid rgba(176,58,46,.3);color:#B03A2E;padding:7px 11px;border-radius:7px;font-size:12px;margin-bottom:10px;font-family:'Roboto Slab',serif;}
+`;
+
 function Hacienda({animales,setAnimales}) {
-  const blank={caravana:"",nombre:"",categoria:"Vaca",lote:"General",estado:"OK",obs:""};
+  const blank={caravana:"",nombre:"",categoria:"Vaca",lote:"General",estado:"OK",toroPreñez:"",obs:""};
   const [form,setForm]=useState(blank);
   const [edit,setEdit]=useState(null);
-  const [showForm,setShowForm]=useState(false);
+  const [showModal,setShowModal]=useState(false);
   const [filtro,setFiltro]=useState("");
   const [loteF,setLoteF]=useState("Todos");
+  const [error,setError]=useState("");
+
+  const abrirNuevo=()=>{setForm(blank);setEdit(null);setError("");setShowModal(true);};
+  const abrirEditar=a=>{setForm({...a,toroPreñez:a.toroPreñez||""});setEdit(a.id);setError("");setShowModal(true);};
+  const cerrar=()=>{setShowModal(false);setEdit(null);setError("");};
 
   const guardar=()=>{
-    if(!form.caravana) return;
-    if(edit){setAnimales(animales.map(a=>a.id===edit?{...form,id:edit}:a));setEdit(null);}
+    if(!form.caravana.trim()){setError("La caravana es obligatoria.");return;}
+    const dup=animales.find(a=>a.caravana.trim().toLowerCase()===form.caravana.trim().toLowerCase()&&a.id!==edit);
+    if(dup){setError(`⚠️ Ya existe un animal con caravana "${form.caravana}".`);return;}
+    if(edit) setAnimales(animales.map(a=>a.id===edit?{...form,id:edit}:a));
     else setAnimales([...animales,{...form,id:uid("A")}]);
-    setForm(blank);setShowForm(false);
+    cerrar();
   };
-  const eliminar=id=>{if(window.confirm("¿Eliminar?"))setAnimales(animales.filter(a=>a.id!==id));};
-  const editar=a=>{setForm({...a});setEdit(a.id);setShowForm(true);};
+
+  const eliminar=id=>{if(window.confirm("¿Eliminar este animal?"))setAnimales(animales.filter(a=>a.id!==id));};
 
   const rows=animales.filter(a=>{
     const lOk=loteF==="Todos"||a.lote===loteF;
@@ -516,36 +531,58 @@ function Hacienda({animales,setAnimales}) {
 
   return (
     <div>
-      <div className="section-hdr">
-        <h2>🐄 Hacienda</h2>
-        <button className="btn btn-prim btn-sm" onClick={()=>{setShowForm(!showForm);setEdit(null);setForm(blank);}}>{showForm?"✕":"＋ Agregar"}</button>
-      </div>
+      <style>{MODAL_STYLE}</style>
 
-      {showForm&&(
-        <div className="card mb">
-          <div className="card-title">{edit?"✏️ Editar":"➕ Nuevo"}</div>
-          <div className="form-row">
-            <div className="field"><label>Caravana</label><input value={form.caravana} onChange={e=>setForm({...form,caravana:e.target.value})}/></div>
-            <div className="field"><label>Nombre</label><input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})}/></div>
+      {showModal&&(
+        <div className="modal-overlay" onClick={e=>{if(e.target.className.includes("modal-overlay"))cerrar();}}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={cerrar}>✕</button>
+            <div className="modal-title">{edit?"✏️ Editar Animal":"➕ Nuevo Animal"}</div>
+            {error&&<div className="error-msg">{error}</div>}
+            <div className="form-row">
+              <div className="field"><label>Caravana *</label><input value={form.caravana} onChange={e=>{setForm({...form,caravana:e.target.value});setError("");}}/></div>
+              <div className="field"><label>Nombre</label><input value={form.nombre||""} onChange={e=>setForm({...form,nombre:e.target.value})}/></div>
+            </div>
+            <div className="form-row">
+              <div className="field"><label>Categoría</label><select value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+                {["Vaca","Vaquilla","Ternera","Ternero","Desmamante H","Toro"].map(c=><option key={c}>{c}</option>)}
+              </select></div>
+              <div className="field"><label>Lote</label><select value={form.lote} onChange={e=>setForm({...form,lote:e.target.value})}>
+                {["General","Cbo3","Cbo4","Cbo5"].map(l=><option key={l}>{l}</option>)}
+              </select></div>
+            </div>
+            <div className="form-row">
+              <div className="field"><label>Estado</label><select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+                {["OK","Preñada","Vacía","Descarte","Vendida"].map(s=><option key={s}>{s}</option>)}
+              </select></div>
+              <div className="field"><label>{form.estado==="Preñada"?"🐂 Toro de preñez":"Obs."}</label>
+                {form.estado==="Preñada"
+                  ? <select value={form.toroPreñez||""} onChange={e=>setForm({...form,toroPreñez:e.target.value})}>
+                      <option value="">Sin asignar</option>
+                      {["Nando","Fokker","Eficaz","Campero","Tabasco","Toro propio","Otro"].map(t=><option key={t}>{t}</option>)}
+                    </select>
+                  : <input value={form.obs||""} onChange={e=>setForm({...form,obs:e.target.value})}/>
+                }
+              </div>
+            </div>
+            {form.estado==="Preñada"&&(
+              <div className="field" style={{marginBottom:12}}>
+                <label>Obs.</label>
+                <input value={form.obs||""} onChange={e=>setForm({...form,obs:e.target.value})}/>
+              </div>
+            )}
+            <div className="flex mt">
+              <button className="btn btn-verde" onClick={guardar}>💾 Guardar</button>
+              <button className="btn btn-ghost btn-sm" onClick={cerrar}>Cancelar</button>
+            </div>
           </div>
-          <div className="form-row">
-            <div className="field"><label>Categoría</label><select value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
-              {["Vaca","Vaquilla","Ternera","Ternero","Desmamante H","Toro"].map(c=><option key={c}>{c}</option>)}
-            </select></div>
-            <div className="field"><label>Lote</label><select value={form.lote} onChange={e=>setForm({...form,lote:e.target.value})}>
-              {["General","Cbo3","Cbo4","Cbo5"].map(l=><option key={l}>{l}</option>)}
-            </select></div>
-          </div>
-          <div className="form-row">
-            <div className="field"><label>Estado</label><select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
-              {["OK","Preñada","Vacía","Descarte","Vendida"].map(s=><option key={s}>{s}</option>)}
-            </select></div>
-            <div className="field"><label>Obs.</label><input value={form.obs} onChange={e=>setForm({...form,obs:e.target.value})}/></div>
-          </div>
-          <div className="flex mt"><button className="btn btn-verde" onClick={guardar}>💾 Guardar</button><button className="btn btn-ghost btn-sm" onClick={()=>setShowForm(false)}>Cancelar</button></div>
         </div>
       )}
 
+      <div className="section-hdr">
+        <h2>🐄 Hacienda</h2>
+        <button className="btn btn-prim btn-sm" onClick={abrirNuevo}>＋ Agregar</button>
+      </div>
       <div className="card">
         <div className="tab-pills">
           {["Todos","General","Cbo3","Cbo4","Cbo5"].map(l=><button key={l} className={`pill${loteF===l?" active":""}`} onClick={()=>setLoteF(l)}>{l}</button>)}
@@ -554,7 +591,7 @@ function Hacienda({animales,setAnimales}) {
         <div className="txt-muted mb">{rows.length} animales</div>
         <div className="tbl-wrap">
           <table>
-            <thead><tr><th>Car.</th><th>Cat.</th><th>Lote</th><th>Estado</th><th>Obs.</th><th>✏️</th></tr></thead>
+            <thead><tr><th>Car.</th><th>Cat.</th><th>Lote</th><th>Estado</th><th>Toro</th><th>Obs.</th><th></th></tr></thead>
             <tbody>
               {rows.map(a=>(
                 <tr key={a.id}>
@@ -562,10 +599,11 @@ function Hacienda({animales,setAnimales}) {
                   <td style={{fontSize:11}}>{a.categoria}</td>
                   <td><span className="badge badge-cielo">{a.lote}</span></td>
                   <td><span className={`badge ${ec[a.estado]||"badge-gris"}`}>{a.estado}</span></td>
-                  <td className="txt-muted" style={{maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.obs||"—"}</td>
+                  <td style={{fontSize:11,color:a.toroPreñez?"#6B4226":"rgba(44,26,14,.35)"}}>{a.toroPreñez||"—"}</td>
+                  <td className="txt-muted" style={{maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.obs||"—"}</td>
                   <td>
                     <div className="flex">
-                      <button className="btn btn-prim btn-sm" onClick={()=>editar(a)}>✏️</button>
+                      <button className="btn btn-prim btn-sm" onClick={()=>abrirEditar(a)}>✏️</button>
                       <button className="btn btn-rojo btn-sm" onClick={()=>eliminar(a.id)}>🗑</button>
                     </div>
                   </td>

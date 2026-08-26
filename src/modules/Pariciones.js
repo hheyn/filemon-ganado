@@ -28,7 +28,7 @@ const blank = {
 // ofrece, aparte, borrar de verdad al ternero de Hacienda (para corregir
 // duplicados de carga, no relacionado con el historial de partos).
 export function Pariciones({ animales, addAnimal, removeAnimal, updateAnimal, rol, abrirFicha, user }) {
-  const [pariciones, addPar, updatePar, removePar] = useCollection("pariciones", { softDelete: true, user });
+  const [pariciones, addPar, updatePar, removePar] = useCollection("pariciones", { softDelete: true, auditar: true, user });
   const puedeEditar = canEdit(rol, "pariciones");
 
   const [form, setForm] = useState(blank);

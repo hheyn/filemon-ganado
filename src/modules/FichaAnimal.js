@@ -4,7 +4,35 @@ import { today, formatDisplay, daysBetween, parseLocalDate } from "../lib/dateUt
 import { fechaReferenciaGestacion, fechaPartoEstimada } from "../lib/gestacion";
 import { Modal } from "../components/Modal";
 import { Icono } from "../components/Icon";
-import { Field, Input, Button, Badge, BadgeEstado } from "../components/Field";
+import { Field, Input, Select, Button, Badge, BadgeEstado } from "../components/Field";
+import { canEdit } from "../lib/permissions";
+
+const MOTIVOS_VACIA = [
+  "No repitió celo (vacía real)",
+  "Repitió celo",
+  "Reabsorción embrionaria",
+  "Aborto",
+  "Eco/tacto tardío impreciso",
+];
+
+function fechaAuditoria(v) {
+  if (!v) return "";
+  if (typeof v.toDate === "function") return v.toDate().toLocaleDateString("es-PY");
+  if (typeof v.seconds === "number") return new Date(v.seconds * 1000).toLocaleDateString("es-PY");
+  return "";
+}
+
+// Traduce el diff crudo de useCollection a texto legible para el historial —
+// solo interesan los campos que realmente cambian el relato del animal.
+const ETIQUETA_CAMPO = { resultado: "Resultado", tipo: "Tipo de parto", estado: "Estado", motivoVacia: "Motivo" };
+const ETIQUETA_VALOR = { "✅": "preñada", "❌": "vacía", "⏳": "pendiente" };
+function textoCorreccion(cambios) {
+  const v = (x) => ETIQUETA_VALOR[x] || x || "—";
+  const partes = Object.keys(cambios)
+    .filter((c) => ETIQUETA_CAMPO[c])
+    .map((c) => `${ETIQUETA_CAMPO[c]}: ${v(cambios[c].antes)} → ${v(cambios[c].despues)}`);
+  return partes.length ? `Corrección — ${partes.join(" · ")}` : null;
+}
 
 function edadTexto(fechaNac) {
   if (!fechaNac) return "—";
@@ -18,17 +46,21 @@ function edadTexto(fechaNac) {
 
 // Ficha del animal — "tres cifras arriba, el estado reproductivo en Tierra
 // Colorada, historial en lista seca" (manual de marca, sección 07).
-export function FichaAnimal({ caravana, animales, rol, onEdit, onClose }) {
+export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose }) {
   const animal = animales.find((a) => a.caravana === caravana);
+  const puedeEditarIatf = canEdit(rol, "iatf");
 
-  const [iatfD] = useCollection("iatf");
+  const [iatfD, , updateIatfDoc] = useCollection("iatf", { auditar: true, user });
   const [parD] = useCollection("pariciones", { softDelete: true, incluirEliminados: true });
   const [sanD] = useCollection("sanidad", { softDelete: true, incluirEliminados: true });
   const [pesD, addPesaje] = useCollection("pesajes");
+  const [audD] = useCollection("auditoria");
 
   const [cargarEvento, setCargarEvento] = useState(false);
   const [nuevoPeso, setNuevoPeso] = useState({ fecha: today(), peso: "" });
   const [guardando, setGuardando] = useState(false);
+  const [editandoIatfId, setEditandoIatfId] = useState(null);
+  const [formIatf, setFormIatf] = useState(null);
 
   if (!animal) {
     onClose?.();
@@ -51,11 +83,35 @@ export function FichaAnimal({ caravana, animales, rol, onEdit, onClose }) {
 
   // Historial unificado, lista seca, una línea por evento.
   const eventos = [
-    ...iatf.map((i) => ({ fecha: i.dia0 || i.dia10 || i.fechaTransferencia || "", texto: `${i.ronda || "IATF-1"} — ${i.resultado === "✅" ? "preñez confirmada" : i.resultado === "❌" ? "vacía" : "pendiente"}${i.toro ? ` · ${i.toro}` : ""}` })),
+    ...iatf.map((i) => ({ fecha: i.dia0 || i.dia10 || i.fechaTransferencia || "", texto: `${i.ronda || "IATF-1"} — ${i.resultado === "✅" ? "preñez confirmada" : i.resultado === "❌" ? "vacía" : "pendiente"}${i.motivoVacia ? ` (${i.motivoVacia})` : ""}${i.toro ? ` · ${i.toro}` : ""}` })),
     ...pariciones.map((p) => ({ fecha: p.fecha, texto: `Parto${p.eliminado ? " (eliminado)" : ""} — ${p.tipo || "Normal"}${p.terneroCar ? ` · cría ${p.terneroCar}` : ""}`, eliminado: p.eliminado })),
     ...sanidad.map((s) => ({ fecha: s.fecha, texto: `${s.producto || s.tipo}${s.eliminado ? " (eliminado)" : ""}`, eliminado: s.eliminado })),
     ...pesajes.map((p) => ({ fecha: p.fecha, texto: `Pesada — ${p.peso} kg` })),
   ].filter((e) => e.fecha).sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  // Correcciones posteriores (ej. eco tardía imprecisa, reabsorción de
+  // embrión) — se muestran aparte para no perder el registro original: la
+  // vaca sigue mostrando que en su momento se cargó "preñada", más la
+  // corrección posterior con fecha y quién la hizo.
+  const idsPropios = new Set([...iatf.map((i) => i.id), ...pariciones.map((p) => p.id)]);
+  const correcciones = (audD || [])
+    .filter((a) => a.accion === "editar" && a.cambios && idsPropios.has(a.docId))
+    .map((a) => ({ id: a.id, fecha: fechaAuditoria(a.fecha), texto: textoCorreccion(a.cambios), email: a.email }))
+    .filter((c) => c.texto);
+
+  const abrirEditarIatf = (i) => {
+    setEditandoIatfId(i.id);
+    setFormIatf({ resultado: i.resultado || "⏳", origenPreniez: i.origenPreniez || "", motivoVacia: i.motivoVacia || "" });
+  };
+
+  const guardarIatf = async () => {
+    if (!editandoIatfId || !formIatf) return;
+    setGuardando(true);
+    await updateIatfDoc(editandoIatfId, formIatf);
+    setGuardando(false);
+    setEditandoIatfId(null);
+    setFormIatf(null);
+  };
 
   const guardarPeso = async () => {
     if (!nuevoPeso.peso || !nuevoPeso.fecha) return;
@@ -68,7 +124,7 @@ export function FichaAnimal({ caravana, animales, rol, onEdit, onClose }) {
 
   return (
     <Modal onClose={onClose}>
-      <div className="flex mb" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="flex mb" style={{ justifyContent: "space-between", alignItems: "flex-start", paddingRight: 38 }}>
         <div>
           <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)" }}>Caravana</div>
           <div className="t-display">{animal.caravana}</div>
@@ -119,6 +175,65 @@ export function FichaAnimal({ caravana, animales, rol, onEdit, onClose }) {
         </div>
       )}
 
+      {iatf.length > 0 && (
+        <div className="mb">
+          <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)", marginBottom: 6 }}>Servicios (IATF)</div>
+          <div className="historial-list">
+            {[...iatf].sort((a, b) => (b.dia0 || "").localeCompare(a.dia0 || "")).map((i) => (
+              <div key={i.id}>
+                <div className="historial-item">
+                  <span className="historial-texto">
+                    {i.ronda || "IATF-1"} — {i.resultado === "✅" ? "preñada" : i.resultado === "❌" ? "vacía" : "pendiente"}
+                    {i.motivoVacia ? ` (${i.motivoVacia})` : ""}{i.dia0 ? ` · ${formatDisplay(i.dia0)}` : ""}
+                  </span>
+                  {puedeEditarIatf && editandoIatfId !== i.id && (
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 12, padding: "3px 8px" }} onClick={() => abrirEditarIatf(i)}>
+                      <Icono nombre="editar" size={14} />
+                    </button>
+                  )}
+                </div>
+                {editandoIatfId === i.id && (
+                  <div className="card" style={{ padding: 10, marginBottom: 6 }}>
+                    <div className="form-row">
+                      <Field label="Resultado">
+                        <Select
+                          value={formIatf.resultado}
+                          onChange={(e) => setFormIatf({ ...formIatf, resultado: e.target.value, origenPreniez: e.target.value === "✅" ? (formIatf.origenPreniez || "IATF") : "" })}
+                          options={[{ value: "⏳", label: "⏳ Pendiente" }, { value: "✅", label: "✅ Preñada" }, { value: "❌", label: "❌ Vacía" }]}
+                        />
+                      </Field>
+                      {formIatf.resultado === "✅" && (
+                        <Field label="Origen preñez">
+                          <Select
+                            value={formIatf.origenPreniez || ""}
+                            onChange={(e) => setFormIatf({ ...formIatf, origenPreniez: e.target.value })}
+                            options={[{ value: "IATF", label: "✅ IATF" }, { value: "TE", label: "🧬 TE" }, { value: "Repaso", label: "🐂 Repaso" }]}
+                          />
+                        </Field>
+                      )}
+                      {formIatf.resultado === "❌" && (
+                        <Field label="Motivo">
+                          <Select
+                            value={formIatf.motivoVacia || ""}
+                            onChange={(e) => setFormIatf({ ...formIatf, motivoVacia: e.target.value })}
+                            placeholder="Sin especificar"
+                            options={MOTIVOS_VACIA.map((m) => ({ value: m, label: m }))}
+                          />
+                        </Field>
+                      )}
+                    </div>
+                    <div className="flex">
+                      <Button variant="verde" sm onClick={guardarIatf} disabled={guardando}>Guardar</Button>
+                      <Button variant="ghost" sm onClick={() => setEditandoIatfId(null)}>Cancelar</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)", marginBottom: 6 }}>Historial</div>
       <div className="historial-list mb">
         {!eventos.length && <div className="txt-muted">Sin eventos registrados.</div>}
@@ -129,6 +244,20 @@ export function FichaAnimal({ caravana, animales, rol, onEdit, onClose }) {
           </div>
         ))}
       </div>
+
+      {correcciones.length > 0 && (
+        <div className="mb">
+          <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)", marginBottom: 6 }}>Correcciones</div>
+          <div className="historial-list">
+            {correcciones.map((c) => (
+              <div key={c.id} className="historial-item">
+                <span className="historial-fecha">{c.fecha}</span>
+                <span className="historial-texto">{c.texto}{c.email ? ` · ${c.email}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {onEdit && !cargarEvento && (
         <div className="flex">

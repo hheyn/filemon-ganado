@@ -4,6 +4,21 @@ import { db } from "../lib/firebase";
 import { registrarAuditoria } from "../lib/auditoria";
 import { today } from "../lib/dateUtils";
 
+// Compara el doc anterior contra los campos nuevos y arma un diff
+// { campo: { antes, despues } } solo con lo que realmente cambió — así la
+// auditoría queda como corrección legible en vez de "editar" a secas.
+function diffCampos(anterior, nuevo) {
+  const cambios = {};
+  for (const campo of Object.keys(nuevo)) {
+    const antes = anterior[campo] ?? null;
+    const despues = nuevo[campo] ?? null;
+    if (JSON.stringify(antes) !== JSON.stringify(despues)) {
+      cambios[campo] = { antes, despues };
+    }
+  }
+  return Object.keys(cambios).length ? cambios : null;
+}
+
 /**
  * Hook genérico de acceso a una colección de Firestore, en tiempo real.
  *
@@ -44,7 +59,9 @@ export function useCollection(colName, options = {}) {
     const { id: _id, ...rest } = data;
     await updateDoc(doc(db, colName, id), rest);
     if (auditar) {
-      registrarAuditoria({ coleccion: colName, docId: id, accion: "editar", user });
+      const anterior = (docs || []).find((d) => d.id === id);
+      const cambios = anterior ? diffCampos(anterior, rest) : null;
+      registrarAuditoria({ coleccion: colName, docId: id, accion: "editar", cambios, user });
     }
   };
 

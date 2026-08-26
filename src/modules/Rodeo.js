@@ -58,7 +58,7 @@ export function Rodeo({ animales, addAnimal, updateAnimal, removeAnimal, rol, us
           rol={rol} abrirFicha={abrirFicha} editarCaravana={editarCaravana} onEditarConsumido={onEditarConsumido}
         />
       )}
-      {vista === "iatf" && <IATF animales={animales} updateAnimal={updateAnimal} rol={rol} abrirFicha={abrirFicha} />}
+      {vista === "iatf" && <IATF animales={animales} updateAnimal={updateAnimal} rol={rol} abrirFicha={abrirFicha} user={user} />}
       {vista === "prenez" && <Prenez animales={animales} rol={rol} abrirFicha={abrirFicha} />}
       {vista === "pariciones" && (
         <Pariciones animales={animales} addAnimal={addAnimal} removeAnimal={removeAnimal} updateAnimal={updateAnimal} rol={rol} abrirFicha={abrirFicha} user={user} />

@@ -14,6 +14,16 @@ import { formatDisplay } from "../lib/dateUtils";
 // fallback/base que siempre está disponible aunque la colección esté vacía.
 const TOROS_DEFAULT = ["Nando", "Fokker", "Eficaz", "Campero", "Tabasco", "Toro propio"];
 
+// Motivo de "vacía" — separado de Obs. para que quede como dato estructurado
+// (filtrable/reportable) y no como texto libre que cada uno escribe distinto.
+const MOTIVOS_VACIA = [
+  "No repitió celo (vacía real)",
+  "Repitió celo",
+  "Reabsorción embrionaria",
+  "Aborto",
+  "Eco/tacto tardío impreciso",
+];
+
 const NUEVA_RONDA = "__nueva__";
 
 // Un registro `iatf` viejo (pre-rondas) no tiene el campo `ronda` — se trata
@@ -35,10 +45,10 @@ function tipoTone(tipo) {
   return "badge-cielo";
 }
 
-export function IATF({ animales, updateAnimal, rol, abrirFicha }) {
+export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
   const puedeEditar = canEdit(rol, "iatf");
 
-  const [iatfD, addIatf, updateIatfDoc, removeIatf] = useCollection("iatf");
+  const [iatfD, addIatf, updateIatfDoc, removeIatf] = useCollection("iatf", { auditar: true, user });
   const iatf = iatfD || [];
   const [torosD, addToroD, , removeToroD] = useCollection("toros");
   const torosDB = torosD || [];
@@ -51,7 +61,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha }) {
     apta: "Apta", protocolo: "Si", tipoServicio: "IATF", toro: "",
     dia0: "", dia8: "", dia10: "",
     donante: "", fechaTransferencia: "",
-    resultado: "⏳", origenPreniez: "", obs: "",
+    resultado: "⏳", origenPreniez: "", motivoVacia: "", obs: "",
   };
 
   const [showForm, setShowForm] = useState(false);
@@ -383,6 +393,18 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha }) {
               />
             </Field>
           </div>
+          {form.resultado === "❌" && (
+            <div className="form-row">
+              <Field label="Motivo (vacía)">
+                <Select
+                  value={form.motivoVacia || ""}
+                  onChange={(e) => setForm({ ...form, motivoVacia: e.target.value })}
+                  placeholder="Sin especificar"
+                  options={MOTIVOS_VACIA.map((m) => ({ value: m, label: m }))}
+                />
+              </Field>
+            </div>
+          )}
           <div className="form-row">
             <Field label="Obs.">
               <Input value={form.obs || ""} onChange={(e) => setForm({ ...form, obs: e.target.value })} />

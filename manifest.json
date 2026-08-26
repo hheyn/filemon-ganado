@@ -1,27 +1,13 @@
 {
   "short_name": "Filemón",
-  "name": "Estancia Filemón – Ganado",
-  "description": "Gestión de ganado bovino – Estancia Filemón, Ayolas Paraguay",
+  "name": "Estancia Filemón — Gestión Bovina",
   "icons": [
-    {
-      "src": "icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
-    }
+    { "src": "favicon.ico", "sizes": "64x64 32x32 24x24 16x16", "type": "image/x-icon" },
+    { "src": "logo192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "logo512.png", "type": "image/png", "sizes": "512x512" }
   ],
   "start_url": ".",
   "display": "standalone",
-  "orientation": "portrait",
   "theme_color": "#6B4226",
-  "background_color": "#F5EDD6",
-  "apple-mobile-web-app-capable": "yes",
-  "apple-mobile-web-app-status-bar-style": "black-translucent",
-  "apple-mobile-web-app-title": "Filemón"
+  "background_color": "#F5EDD6"
 }

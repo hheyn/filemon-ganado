@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Botiquín">
+  <rect x="3.5" y="7.5" width="17" height="12.5" rx="1.5"></rect>
+  <path d="M9 7.5V5.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+  <path d="M12 11.5v5M9.5 14h5"></path>
+</svg>

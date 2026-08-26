@@ -1,0 +1,93 @@
+rules_version = '2';
+// IMPORTANTE: esta matriz de permisos debe mantenerse sincronizada A MANO con
+// src/lib/permissions.js (ROLE_MODULE_MATRIX) — las reglas de Firestore no
+// pueden importar ese archivo. Si cambiás algo acá, cambialo también ahí.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function myUser() { return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)); }
+    function myRol() { return isSignedIn() && myUser().data.activo == true ? myUser().data.rol : null; }
+    function isAdmin() { return myRol() == 'admin'; }
+    function isCapataz() { return myRol() == 'capataz'; }
+    function isVet() { return myRol() == 'veterinario'; }
+    function isActiveUser() { return isSignedIn() && myUser().data.activo == true; }
+
+    match /usuarios/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /costos/{doc} {
+      allow read, write: if isAdmin();
+    }
+
+    match /auditoria/{doc} {
+      allow read: if isAdmin();
+      allow create: if isActiveUser();
+      allow update, delete: if false;
+    }
+
+    match /animales/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    match /sanidad/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    match /productos/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    // Botiquín virtual: libro de movimientos de stock (compras/consumos/ajustes).
+    match /stock_movimientos/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    match /iatf/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isVet();
+    }
+
+    match /pariciones/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isVet() || isCapataz();
+    }
+
+    match /rotaciones/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz();
+    }
+
+    match /toros/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    match /bajas/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz();
+    }
+
+    match /pesajes/{doc} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() || isCapataz() || isVet();
+    }
+
+    // Colección legacy retirada del código — se deja de escribir, pero si
+    // quedan documentos viejos siguen siendo legibles (no se borra nada).
+    match /potreros/{doc} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

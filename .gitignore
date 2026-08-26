@@ -1,0 +1,7 @@
+node_modules
+build
+.DS_Store
+.env.local
+.firebase
+firestore-debug.log
+.claude/scheduled_tasks.lock

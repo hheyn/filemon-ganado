@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Hacienda">
+  <path d="M4 8c0-1.5 1-2.5 2.5-2.5S9 6.5 9 8"></path>
+  <path d="M20 8c0-1.5-1-2.5-2.5-2.5S15 6.5 15 8"></path>
+  <path d="M9 8h6l1.5 5.5c0 3-2 5.5-4.5 5.5S7.5 16.5 7.5 13.5z"></path>
+  <path d="M10.6 12.6h.01M13.4 12.6h.01"></path>
+</svg>

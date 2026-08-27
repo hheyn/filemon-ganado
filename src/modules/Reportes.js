@@ -271,6 +271,37 @@ export function Reportes({ animales, rol }) {
           styles: { ...commonStyles, fontSize: 7 }, headStyles: { ...commonHead, fontSize: 7 }, alternateRowStyles: commonAlt,
           didDrawPage: () => header(),
         });
+
+        // Resumen final — cuántas vacas por categoría+tipo de servicio, y
+        // cuántas pajuelas/servicios por toro (para calcular semen/pajuelas
+        // a comprar antes de arrancar la campaña).
+        const conteoCategoriaTipo = {};
+        datosIatf.forEach((i) => {
+          const categoria = animales.find((a) => a.caravana === i.caravana)?.categoria || "—";
+          const key = `${categoria} · ${i.tipoServicio || "IATF"}`;
+          conteoCategoriaTipo[key] = (conteoCategoriaTipo[key] || 0) + 1;
+        });
+        const conteoToro = {};
+        datosIatf.forEach((i) => {
+          const label = i.toro || "—";
+          conteoToro[label] = (conteoToro[label] || 0) + 1;
+        });
+        runAutoTable(doc, {
+          head: [["Resumen por categoría / tipo de servicio", "Cant."]],
+          body: Object.entries(conteoCategoriaTipo).map(([k, v]) => [k, v]),
+          startY: doc.lastAutoTable.finalY + 8,
+          margin: { left: 12, right: 12, bottom: 12 }, tableWidth: 110,
+          styles: commonStyles, headStyles: commonHead, alternateRowStyles: commonAlt,
+          didDrawPage: () => header(),
+        });
+        runAutoTable(doc, {
+          head: [["Resumen por toro / pajuela", "Cant."]],
+          body: Object.entries(conteoToro).map(([k, v]) => [k, v]),
+          startY: doc.lastAutoTable.finalY + 8,
+          margin: { left: 12, right: 12, bottom: 12 }, tableWidth: 110,
+          styles: commonStyles, headStyles: commonHead, alternateRowStyles: commonAlt,
+          didDrawPage: () => header(),
+        });
         guardarPDF(doc, `Filemon_IATF_${filtCamp}_${filtRondaIatf}_${HOY_FILE}.pdf`);
       } else if (tipoReporte === "pariciones") {
         const vivos = datosParicionesOrdenadas.filter((p) => p.estado !== "Baja").length;

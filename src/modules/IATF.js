@@ -7,7 +7,19 @@ import { Icono } from "../components/Icon";
 import { Field, Input, Select, Button, Badge } from "../components/Field";
 import { LOTES, TIPOS_SERVICIO, RONDAS_SUGERIDAS, C } from "../lib/constants";
 import { canEdit } from "../lib/permissions";
-import { formatDisplay } from "../lib/dateUtils";
+import { formatDisplay, addDays } from "../lib/dateUtils";
+
+// Protocolo estándar de sincronización (dispositivo 8 días): día8 = retiro
+// del dispositivo, día10 = IATF a tiempo fijo (48-56h post-retiro). Para TE
+// el dispositivo se maneja igual (día8), pero la transferencia del embrión
+// se hace 7 días post-ovulación fija (~día17), no en el día10 de la IATF —
+// por eso el campo que se completa cambia según tipoServicio.
+function autocompletarProtocolo(dia0, tipoServicio) {
+  if (!dia0) return {};
+  return tipoServicio === "TE"
+    ? { dia8: addDays(dia0, 8), fechaTransferencia: addDays(dia0, 17) }
+    : { dia8: addDays(dia0, 8), dia10: addDays(dia0, 10) };
+}
 
 // Toros de partida — coinciden con los que ya se usan en la estancia.
 // El catálogo real vive en la colección Firestore `toros`; esta lista es el
@@ -25,6 +37,51 @@ const MOTIVOS_VACIA = [
 ];
 
 const NUEVA_RONDA = "__nueva__";
+const anioActual = new Date().getFullYear();
+const CAMPANIA_DEFAULT = `${anioActual}-${anioActual + 1}`;
+
+// Campos de protocolo compartidos por "Candidatas" y "Cargar por lote" — el
+// mismo bloque (toro/día0/día8 + lo específico de TE) aparece en ambos flujos
+// de alta masiva, la única diferencia es de dónde sale la lista de animales.
+function CamposServicio({ shared, setShared, toros }) {
+  return (
+    <>
+      <div className="form-row">
+        <Field label="Tipo de servicio">
+          <Select options={TIPOS_SERVICIO} value={shared.tipoServicio} onChange={(e) => setShared({ ...shared, tipoServicio: e.target.value, ...autocompletarProtocolo(shared.dia0, e.target.value) })} />
+        </Field>
+        <Field label={shared.tipoServicio === "TE" ? <><Icono nombre="servicios" size={14} /> Toro/pajuela del embrión</> : <><Icono nombre="toro" size={14} /> Toro</>}>
+          <Select options={toros} value={shared.toro} onChange={(e) => setShared({ ...shared, toro: e.target.value })} />
+        </Field>
+      </div>
+      <div className="form-row">
+        <Field label={<><Icono nombre="fecha" size={14} /> {shared.tipoServicio === "TE" ? "Día 0 (sincronización receptora)" : "Día 0"}</>}>
+          <Input type="date" value={shared.dia0} onChange={(e) => setShared({ ...shared, dia0: e.target.value, ...autocompletarProtocolo(e.target.value, shared.tipoServicio) })} />
+        </Field>
+        <Field label={<><Icono nombre="fecha" size={14} /> {shared.tipoServicio === "TE" ? "Día 8 (retiro receptora)" : "Día 8"}</>}>
+          <Input type="date" value={shared.dia8} onChange={(e) => setShared({ ...shared, dia8: e.target.value })} />
+        </Field>
+      </div>
+      {shared.tipoServicio === "TE" ? (
+        <div className="form-row">
+          <Field label="Vaca donante (genética de origen)">
+            <Input value={shared.donante} onChange={(e) => setShared({ ...shared, donante: e.target.value })} />
+          </Field>
+          <Field label={<><Icono nombre="fecha" size={14} /> Fecha de transferencia</>}>
+            <Input type="date" value={shared.fechaTransferencia} onChange={(e) => setShared({ ...shared, fechaTransferencia: e.target.value })} />
+          </Field>
+        </div>
+      ) : (
+        <div className="form-row">
+          <Field label={<><Icono nombre="fecha" size={14} /> Día 10 (inseminación)</>}>
+            <Input type="date" value={shared.dia10} onChange={(e) => setShared({ ...shared, dia10: e.target.value })} />
+          </Field>
+          <div />
+        </div>
+      )}
+    </>
+  );
+}
 
 // Un registro `iatf` viejo (pre-rondas) no tiene el campo `ronda` — se trata
 // como "IATF-1" (primera/única ronda de esa campaña) en vez de mostrarlo
@@ -198,6 +255,74 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
 
   const rondaFinalCandidatas = candRonda === NUEVA_RONDA ? candRondaNuevaTxt.trim() : candRonda;
 
+  // --- Cargar servicio inicial por lote(s) ---
+  // A diferencia de "Candidatas" (que parte de registros iatf previos), esto
+  // arma los primeros registros de una campaña a partir de Hacienda: elegís
+  // uno o más lotes, se listan las vacas/vaquillas de esos lotes, y se puede
+  // destildar animales puntuales antes de crear el servicio (para no incluir
+  // una vaca que no corresponde este año, sin tener que armar un lote aparte).
+  const [showPorLote, setShowPorLote] = useState(false);
+  const [porLoteLotes, setPorLoteLotes] = useState(new Set());
+  const [porLoteExcluidos, setPorLoteExcluidos] = useState(new Set());
+  const [porLoteRondaTxt, setPorLoteRondaTxt] = useState("IATF-1");
+  const [porLoteShared, setPorLoteShared] = useState({
+    campania: CAMPANIA_DEFAULT, tipoServicio: "IATF", toro: "",
+    dia0: "", dia8: "", dia10: "", donante: "", fechaTransferencia: "",
+  });
+
+  const abrirPorLote = () => {
+    setPorLoteLotes(new Set());
+    setPorLoteExcluidos(new Set());
+    setPorLoteRondaTxt("IATF-1");
+    setPorLoteShared({ campania: CAMPANIA_DEFAULT, tipoServicio: "IATF", toro: "", dia0: "", dia8: "", dia10: "", donante: "", fechaTransferencia: "" });
+    setShowPorLote(true);
+  };
+
+  const toggleLotePorLote = (lote) => {
+    setPorLoteLotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(lote)) next.delete(lote); else next.add(lote);
+      return next;
+    });
+  };
+
+  const animalesPorLote = animales.filter((a) => ["Vaca", "Vaquilla"].includes(a.categoria) && porLoteLotes.has(a.lote));
+
+  const toggleExcluidoPorLote = (caravana) => {
+    setPorLoteExcluidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(caravana)) next.delete(caravana); else next.add(caravana);
+      return next;
+    });
+  };
+
+  const seleccionadosPorLote = animalesPorLote.filter((a) => !porLoteExcluidos.has(a.caravana));
+
+  const crearServicioPorLote = async () => {
+    const ronda = porLoteRondaTxt.trim();
+    if (!ronda || seleccionadosPorLote.length === 0) return;
+    await Promise.all(seleccionadosPorLote.map((a) => addIatf({
+      creadoEn: serverTimestamp(),
+      caravana: a.caravana,
+      lote: a.lote,
+      campania: porLoteShared.campania,
+      ronda,
+      apta: "Apta",
+      protocolo: porLoteShared.tipoServicio === "Repaso Toro" ? "No" : "Si",
+      tipoServicio: porLoteShared.tipoServicio,
+      toro: porLoteShared.toro,
+      dia0: porLoteShared.dia0,
+      dia8: porLoteShared.dia8,
+      dia10: porLoteShared.dia10,
+      donante: porLoteShared.donante,
+      fechaTransferencia: porLoteShared.fechaTransferencia,
+      resultado: "⏳",
+      origenPreniez: "",
+      obs: `Carga inicial por lote — ${[...porLoteLotes].join(", ")}`,
+    })));
+    setShowPorLote(false);
+  };
+
   // Candidatas = registros de la campaña elegida, de CUALQUIER ronda distinta
   // a la ronda nueva que se va a crear, con resultado ❌ o ⏳ (no preñada
   // todavía). Si un animal aparece en más de un registro anterior, se
@@ -308,7 +433,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
           </div>
           <div className="form-row">
             <Field label={<><Icono nombre="fecha" size={14} /> {esTE ? "Día 0 (sincronización receptora)" : "Día 0 (dispositivo)"}</>}>
-              <Input type="date" value={form.dia0 || ""} onChange={(e) => setForm({ ...form, dia0: e.target.value })} />
+              <Input type="date" value={form.dia0 || ""} onChange={(e) => setForm({ ...form, dia0: e.target.value, ...autocompletarProtocolo(e.target.value, form.tipoServicio) })} />
             </Field>
             <Field label={<><Icono nombre="fecha" size={14} /> {esTE ? "Día 8 (retiro receptora)" : "Día 8 (retiro)"}</>}>
               <Input type="date" value={form.dia8 || ""} onChange={(e) => setForm({ ...form, dia8: e.target.value })} />
@@ -320,7 +445,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
                 <Input type="date" value={form.dia10 || ""} onChange={(e) => setForm({ ...form, dia10: e.target.value })} />
               </Field>
               <Field label="Tipo de servicio">
-                <Select options={TIPOS_SERVICIO} value={form.tipoServicio} onChange={(e) => setForm({ ...form, tipoServicio: e.target.value })} />
+                <Select options={TIPOS_SERVICIO} value={form.tipoServicio} onChange={(e) => setForm({ ...form, tipoServicio: e.target.value, ...autocompletarProtocolo(form.dia0, e.target.value) })} />
               </Field>
             </div>
           )}
@@ -337,7 +462,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
           {esTE && (
             <div className="form-row">
               <Field label="Tipo de servicio">
-                <Select options={TIPOS_SERVICIO} value={form.tipoServicio} onChange={(e) => setForm({ ...form, tipoServicio: e.target.value })} />
+                <Select options={TIPOS_SERVICIO} value={form.tipoServicio} onChange={(e) => setForm({ ...form, tipoServicio: e.target.value, ...autocompletarProtocolo(form.dia0, e.target.value) })} />
               </Field>
               <div />
             </div>
@@ -439,39 +564,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
               )}
             </Field>
           </div>
-          <div className="form-row">
-            <Field label="Tipo de servicio de la ronda nueva">
-              <Select options={TIPOS_SERVICIO} value={candShared.tipoServicio} onChange={(e) => setCandShared({ ...candShared, tipoServicio: e.target.value })} />
-            </Field>
-            <Field label={candShared.tipoServicio === "TE" ? <><Icono nombre="servicios" size={14} /> Toro/pajuela del embrión</> : <><Icono nombre="toro" size={14} /> Toro</>}>
-              <Select options={toros} value={candShared.toro} onChange={(e) => setCandShared({ ...candShared, toro: e.target.value })} />
-            </Field>
-          </div>
-          <div className="form-row">
-            <Field label={<><Icono nombre="fecha" size={14} /> {candShared.tipoServicio === "TE" ? "Día 0 (sincronización receptora)" : "Día 0"}</>}>
-              <Input type="date" value={candShared.dia0} onChange={(e) => setCandShared({ ...candShared, dia0: e.target.value })} />
-            </Field>
-            <Field label={<><Icono nombre="fecha" size={14} /> {candShared.tipoServicio === "TE" ? "Día 8 (retiro receptora)" : "Día 8"}</>}>
-              <Input type="date" value={candShared.dia8} onChange={(e) => setCandShared({ ...candShared, dia8: e.target.value })} />
-            </Field>
-          </div>
-          {candShared.tipoServicio === "TE" ? (
-            <div className="form-row">
-              <Field label="Vaca donante (genética de origen)">
-                <Input value={candShared.donante} onChange={(e) => setCandShared({ ...candShared, donante: e.target.value })} />
-              </Field>
-              <Field label={<><Icono nombre="fecha" size={14} /> Fecha de transferencia</>}>
-                <Input type="date" value={candShared.fechaTransferencia} onChange={(e) => setCandShared({ ...candShared, fechaTransferencia: e.target.value })} />
-              </Field>
-            </div>
-          ) : (
-            <div className="form-row">
-              <Field label={<><Icono nombre="fecha" size={14} /> Día 10 (inseminación)</>}>
-                <Input type="date" value={candShared.dia10} onChange={(e) => setCandShared({ ...candShared, dia10: e.target.value })} />
-              </Field>
-              <div />
-            </div>
-          )}
+          <CamposServicio shared={candShared} setShared={setCandShared} toros={toros} />
 
           <div className="section-hdr" style={{ marginTop: 12, marginBottom: 6 }}>
             <h2 style={{ fontSize: 15 }}>Candidatas ({candSeleccionados.length} / {candidatos.length} seleccionadas)</h2>
@@ -507,10 +600,69 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         </Modal>
       )}
 
+      {showPorLote && (
+        <Modal onClose={() => setShowPorLote(false)} title={<><Icono nombre="hacienda" size={14} /> Cargar servicio por lote</>} wide>
+          <div className="txt-muted mb">
+            Elegí uno o más lotes — se listan las vacas/vaquillas de esos lotes para que destildes las que no correspondan. Se crea un registro pendiente por cada una seleccionada.
+          </div>
+          <Field label="Lotes">
+            <div className="flex" style={{ flexWrap: "wrap", gap: 6 }}>
+              {LOTES.map((l) => (
+                <label key={l} className="pill" style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                  <input type="checkbox" checked={porLoteLotes.has(l)} onChange={() => toggleLotePorLote(l)} />
+                  {l}
+                </label>
+              ))}
+            </div>
+          </Field>
+          <div className="form-row">
+            <Field label={<><Icono nombre="fecha" size={14} /> Campaña</>}>
+              <Input value={porLoteShared.campania} onChange={(e) => setPorLoteShared({ ...porLoteShared, campania: e.target.value })} placeholder={CAMPANIA_DEFAULT} />
+            </Field>
+            <Field label="Ronda">
+              <Input value={porLoteRondaTxt} onChange={(e) => setPorLoteRondaTxt(e.target.value)} placeholder="ej: IATF-1" />
+            </Field>
+          </div>
+          <CamposServicio shared={porLoteShared} setShared={setPorLoteShared} toros={toros} />
+
+          <div className="section-hdr" style={{ marginTop: 12, marginBottom: 6 }}>
+            <h2 style={{ fontSize: 15 }}>Animales ({seleccionadosPorLote.length} / {animalesPorLote.length} seleccionados)</h2>
+          </div>
+          {porLoteLotes.size === 0 ? (
+            <div className="txt-muted">Elegí al menos un lote arriba.</div>
+          ) : animalesPorLote.length === 0 ? (
+            <div className="txt-muted">No hay vacas/vaquillas en los lotes elegidos.</div>
+          ) : (
+            <div className="tbl-wrap" style={{ maxHeight: 260, overflowY: "auto" }}>
+              <table>
+                <thead><tr><th></th><th>Caravana</th><th>Lote</th><th>Estado</th></tr></thead>
+                <tbody>
+                  {animalesPorLote.map((a) => (
+                    <tr key={a.id}>
+                      <td><input type="checkbox" checked={!porLoteExcluidos.has(a.caravana)} onChange={() => toggleExcluidoPorLote(a.caravana)} /></td>
+                      <td><strong>{a.caravana}</strong></td>
+                      <td>{a.lote}</td>
+                      <td>{a.estado}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex mt">
+            <Button variant="verde" onClick={crearServicioPorLote} disabled={!porLoteRondaTxt.trim() || seleccionadosPorLote.length === 0}>
+              <Icono nombre="guardar" size={14} /> Crear {seleccionadosPorLote.length} registro{seleccionadosPorLote.length === 1 ? "" : "s"}
+            </Button>
+            <Button variant="ghost" sm onClick={() => setShowPorLote(false)}>Cancelar</Button>
+          </div>
+        </Modal>
+      )}
+
       <div className="section-hdr">
         <h2><Icono nombre="servicios" size={16} /> Servicios</h2>
         <div className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
           {puedeEditar && <Button variant="ghost" sm onClick={() => setShowToros(true)}><Icono nombre="toro" size={14} /> Toros</Button>}
+          {puedeEditar && <Button variant="ghost" sm onClick={abrirPorLote}><Icono nombre="hacienda" size={14} /> Cargar por lote</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirCandidatas}><Icono nombre="repasoResincro" size={14} /> Candidatas a repaso</Button>}
           {puedeEditar && <Button variant="prim" sm onClick={() => setShowForm(!showForm)}>{showForm ? <Icono nombre="cerrar" size={14} /> : <Icono nombre="agregar" size={14} />}</Button>}
         </div>

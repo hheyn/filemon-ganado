@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/filemon-ganado/static/css/main.414a1eec.css",
-    "main.js": "/filemon-ganado/static/js/main.8558788a.js",
+    "main.js": "/filemon-ganado/static/js/main.2b9402d8.js",
     "static/js/239.db9c1b04.chunk.js": "/filemon-ganado/static/js/239.db9c1b04.chunk.js",
     "static/js/213.f9f19918.chunk.js": "/filemon-ganado/static/js/213.f9f19918.chunk.js",
     "static/js/732.bc84fdfb.chunk.js": "/filemon-ganado/static/js/732.bc84fdfb.chunk.js",
@@ -9,13 +9,13 @@
     "static/media/sello-hueso.png": "/filemon-ganado/static/media/sello-hueso.990029981c17a61af25a.png",
     "index.html": "/filemon-ganado/index.html",
     "main.414a1eec.css.map": "/filemon-ganado/static/css/main.414a1eec.css.map",
-    "main.8558788a.js.map": "/filemon-ganado/static/js/main.8558788a.js.map",
+    "main.2b9402d8.js.map": "/filemon-ganado/static/js/main.2b9402d8.js.map",
     "239.db9c1b04.chunk.js.map": "/filemon-ganado/static/js/239.db9c1b04.chunk.js.map",
     "213.f9f19918.chunk.js.map": "/filemon-ganado/static/js/213.f9f19918.chunk.js.map",
     "732.bc84fdfb.chunk.js.map": "/filemon-ganado/static/js/732.bc84fdfb.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.414a1eec.css",
-    "static/js/main.8558788a.js"
+    "static/js/main.2b9402d8.js"
   ]
 }

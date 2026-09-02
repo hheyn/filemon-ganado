@@ -154,6 +154,7 @@ function AppShell({ rol, user, perfil, logout }) {
           animales={animales}
           rol={rol}
           user={user}
+          updateAnimal={updateAnimal}
           onEdit={canAccessModule(rol, "hacienda") ? (caravana) => {
             setFichaCaravana(null);
             setEditarCaravana(caravana);

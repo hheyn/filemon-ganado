@@ -46,7 +46,7 @@ function edadTexto(fechaNac) {
 
 // Ficha del animal — "tres cifras arriba, el estado reproductivo en Tierra
 // Colorada, historial en lista seca" (manual de marca, sección 07).
-export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose }) {
+export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, updateAnimal }) {
   const animal = animales.find((a) => a.caravana === caravana);
   const puedeEditarIatf = canEdit(rol, "iatf");
 
@@ -108,6 +108,14 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose }) 
     if (!editandoIatfId || !formIatf) return;
     setGuardando(true);
     await updateIatfDoc(editandoIatfId, formIatf);
+    // Mismo criterio que IATF.js sincronizarAnimal(): el resultado del
+    // servicio es la fuente de verdad del estado reproductivo del animal —
+    // si se corrige acá, el estado tiene que moverse con él, si no queda la
+    // misma desincronización que motivó este fix (iatf ✅ viejo vs. estado
+    // del animal ya cambiado por otro lado).
+    if (updateAnimal && (formIatf.resultado === "✅" || formIatf.resultado === "❌")) {
+      await updateAnimal(animal.id, { ...animal, estado: formIatf.resultado === "✅" ? "Preñada" : "Vacía" });
+    }
     setGuardando(false);
     setEditandoIatfId(null);
     setFormIatf(null);

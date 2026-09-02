@@ -15,14 +15,31 @@ export function Inicio({ animales, rol, abrirFicha, irA }) {
   const sanidad = sanD || [];
 
   const total = animales.length;
-  const prenadas = animales.filter((a) => a.estado === "Preñada").length;
-  const porNacer = iatf.filter((i) => i.resultado === "✅" && fechaReferenciaGestacion(i)).length;
+  const animalesPrenados = animales.filter((a) => a.estado === "Preñada");
+  const prenadas = animalesPrenados.length;
+
+  // "Por nacer": antes contaba CUALQUIER registro iatf con resultado ✅ que
+  // haya existido alguna vez, incluyendo preñeces de campañas viejas que ya
+  // parieron (el registro ✅ queda para siempre en el historial, no se borra
+  // — ver "historial permanente"). Eso lo desalineaba del número real de
+  // Preñadas (estado vivo del animal). Ahora sale de las mismas vacas que ya
+  // cuentan como Preñadas, tomando su registro ✅ más reciente — así nunca
+  // puede ser mayor a Preñadas ni arrastrar preñeces ya resueltas.
+  const registroPrenezVigente = (caravana) => {
+    const registros = iatf.filter((i) => i.caravana === caravana && i.resultado === "✅");
+    return registros.sort((a, b) => (b.creadoEn?.seconds || 0) - (a.creadoEn?.seconds || 0))[0];
+  };
+  const porNacer = animalesPrenados.filter((a) => {
+    const r = registroPrenezVigente(a.caravana);
+    return r && fechaReferenciaGestacion(r);
+  }).length;
 
   // Alerta del día: el hallazgo más urgente disponible con los datos que ya
   // tenemos — partos estimados dentro de 7 días, si hay; si no, ningún card.
   const hoy = today();
-  const partosProximos = iatf
-    .filter((i) => i.resultado === "✅" && fechaReferenciaGestacion(i))
+  const partosProximos = animalesPrenados
+    .map((a) => registroPrenezVigente(a.caravana))
+    .filter((i) => i && fechaReferenciaGestacion(i))
     .map((i) => ({ ...i, fechaEst: fechaPartoEstimada(i) }))
     .filter((i) => i.fechaEst && daysBetween(i.fechaEst, hoy) * -1 <= 7 && daysBetween(i.fechaEst, hoy) * -1 >= -3);
 

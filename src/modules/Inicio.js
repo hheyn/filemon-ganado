@@ -18,21 +18,16 @@ export function Inicio({ animales, rol, abrirFicha, irA }) {
   const animalesPrenados = animales.filter((a) => a.estado === "Preñada");
   const prenadas = animalesPrenados.length;
 
-  // "Por nacer": antes contaba CUALQUIER registro iatf con resultado ✅ que
-  // haya existido alguna vez, incluyendo preñeces de campañas viejas que ya
-  // parieron (el registro ✅ queda para siempre en el historial, no se borra
-  // — ver "historial permanente"). Eso lo desalineaba del número real de
-  // Preñadas (estado vivo del animal). Ahora sale de las mismas vacas que ya
-  // cuentan como Preñadas, tomando su registro ✅ más reciente — así nunca
-  // puede ser mayor a Preñadas ni arrastrar preñeces ya resueltas.
+  // (Antes había acá un cálculo aparte de "por nacer" a partir de registros
+  // iatf ✅ — se sacó porque, bien hecho, da siempre el mismo número que
+  // Preñadas: toda vaca preñada termina en un parto, no hay forma de que sea
+  // otro valor. Mostrar el mismo dato dos veces con dos criterios distintos
+  // fue justo lo que generó la confusión real de datos que motivó este
+  // cambio — mejor un solo número que dos que puedan desalinearse.)
   const registroPrenezVigente = (caravana) => {
     const registros = iatf.filter((i) => i.caravana === caravana && i.resultado === "✅");
     return registros.sort((a, b) => (b.creadoEn?.seconds || 0) - (a.creadoEn?.seconds || 0))[0];
   };
-  const porNacer = animalesPrenados.filter((a) => {
-    const r = registroPrenezVigente(a.caravana);
-    return r && fechaReferenciaGestacion(r);
-  }).length;
 
   // Alerta del día: el hallazgo más urgente disponible con los datos que ya
   // tenemos — partos estimados dentro de 7 días, si hay; si no, ningún card.
@@ -51,7 +46,6 @@ export function Inicio({ animales, rol, abrirFicha, irA }) {
         <div className="statbox">
           <div className="statbox-num">{total}</div>
           <div className="statbox-lbl">Cabezas</div>
-          {porNacer > 0 && <div className="statbox-sub">+{porNacer} por nacer</div>}
         </div>
         <div className="statbox verde">
           <div className="statbox-num">{prenadas}</div>

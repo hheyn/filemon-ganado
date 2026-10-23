@@ -73,7 +73,10 @@ export function Reportes({ animales, rol }) {
 
   // ── Servicios IATF (campaña + ronda) ───────────────────────────────────
   const campsIatf = ["Todas", ...new Set(iatfD.map((i) => i.campania || "2025"))].sort((a, b) => b.localeCompare(a));
-  const [filtCamp, setFiltCamp] = useState("Todas");
+  // Arranca en la campaña más reciente, no en "Todas" — para no mezclar por
+  // defecto campañas viejas (ya resueltas) con la que está en curso, que es
+  // el caso de uso real al imprimir una planilla para el corral.
+  const [filtCamp, setFiltCamp] = useState(campsIatf[1] || "Todas");
   const rondasIatf = [
     "Todas",
     ...new Set(iatfD.filter((i) => filtCamp === "Todas" || (i.campania || "2025") === filtCamp).map(rondaDe)),

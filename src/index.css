@@ -111,6 +111,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
 @media(max-width:420px){.grid3,.grid4{grid-template-columns:1fr 1fr;}}
 
+/* El diseño es mobile-first (manual de marca), pero en una compu con una
+   ventana ancha esa misma columna de 640px deja casi toda la pantalla
+   vacía — y obliga a desplazarse de lado a lado dentro de tablas anchas
+   (Servicios, Hacienda) que sí tendrían lugar de sobra. A partir de 900px
+   se usa el espacio real del navegador; por debajo de eso (celular/tablet
+   en mano) el layout angosto queda intacto. */
+@media(min-width:900px){
+  .header-inner,.main{max-width:1180px;}
+  .nav-bottom{max-width:1180px;margin:0 auto;}
+}
+
 /* ── Card plana — sin sombra, sin degradado ───────────────────────────── */
 .card{background:var(--hueso);border:var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
 .card-title{font-family:var(--font-ui);font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--verde-monte);margin-bottom:12px;padding-bottom:9px;border-bottom:var(--border);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}

@@ -747,10 +747,15 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
                 const tipo = tipoDe(i);
                 const fechaRef = tipo === "TE" ? i.fechaTransferencia : i.dia10;
                 return (
-                  <tr key={i.id}>
+                  <tr
+                    key={i.id}
+                    onClick={() => puedeEditar && abrirEditar(i)}
+                    style={puedeEditar ? { cursor: "pointer" } : undefined}
+                    title={puedeEditar ? "Click para editar este registro" : undefined}
+                  >
                     <td><Badge tone="cielo">{i.campania || "2025"}</Badge></td>
                     <td><Badge tone="morado">{rondaDe(i)}</Badge></td>
-                    <td>{anim ? <button className="btn btn-ghost btn-sm" style={{ padding: "2px 8px", fontWeight: 700, fontSize: 12 }} onClick={() => abrirFicha(i.caravana)}>{i.caravana}</button> : <strong>{i.caravana}</strong>}</td>
+                    <td>{anim ? <button className="btn btn-ghost btn-sm" style={{ padding: "2px 8px", fontWeight: 700, fontSize: 12 }} onClick={(e) => { e.stopPropagation(); abrirFicha(i.caravana); }}>{i.caravana}</button> : <strong>{i.caravana}</strong>}</td>
                     <td><Badge tone="cielo">{i.lote}</Badge></td>
                     <td><Badge tone={i.apta === "Apta" ? "verde" : "rojo"}>{i.apta === "Apta" ? "✓ Apta" : "✗ No"}</Badge></td>
                     <td style={{ textAlign: "center" }}>
@@ -773,8 +778,8 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
                     <td className="txt-muted" style={{ fontSize: 10, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.obs || "—"}</td>
                     {puedeEditar && (
                       <td style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 12, padding: "3px 8px" }} onClick={() => abrirEditar(i)}><Icono nombre="editar" size={14} /></button>
-                        <button className="btn btn-rojo btn-sm" onClick={() => eliminar(i.id)}><Icono nombre="eliminar" size={14} /></button>
+                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 12, padding: "3px 8px" }} onClick={(e) => { e.stopPropagation(); abrirEditar(i); }}><Icono nombre="editar" size={14} /></button>
+                        <button className="btn btn-rojo btn-sm" onClick={(e) => { e.stopPropagation(); eliminar(i.id); }}><Icono nombre="eliminar" size={14} /></button>
                       </td>
                     )}
                   </tr>

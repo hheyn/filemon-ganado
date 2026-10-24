@@ -184,7 +184,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
     if (f.resultado === "✅") {
       await updateAnimal(animal.id, { ...animal, estado: "Preñada", toroPreñez: f.toro });
     } else if (f.resultado === "❌") {
-      await updateAnimal(animal.id, { ...animal, estado: "Vacía" });
+      await updateAnimal(animal.id, { ...animal, estado: "Vacía", toroPreñez: "" });
     }
     // ⏳ = sin cambio
   };

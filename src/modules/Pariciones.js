@@ -82,7 +82,7 @@ export function Pariciones({ animales, addAnimal, removeAnimal, updateAnimal, ro
     // Auto-cambiar estado de la madre a "Vacía".
     const madre = animales.find((a) => a.caravana === form.madreCaravana);
     if (madre && (madre.estado === "Preñada" || madre.estado === "Pendiente")) {
-      await updateAnimal(madre.id, { ...madre, estado: "Vacía" });
+      await updateAnimal(madre.id, { ...madre, estado: "Vacía", toroPreñez: "" });
     }
 
     cerrar();

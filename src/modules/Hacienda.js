@@ -205,7 +205,7 @@ export function Hacienda({ animales, addAnimal, updateAnimal, removeAnimal, rol,
                     ) : <span className="txt-muted">—</span>}
                   </td>
                   <td style={{ fontSize: 11, color: "rgba(21,21,15,.5)" }}>{a.fechaNac || "—"}</td>
-                  <td style={{ fontSize: 11, color: a.toroPreñez ? C.tinta : "rgba(21,21,15,.35)" }}>{a.toroPreñez || "—"}</td>
+                  <td style={{ fontSize: 11, color: a.estado === "Preñada" && a.toroPreñez ? C.tinta : "rgba(21,21,15,.35)" }}>{a.estado === "Preñada" ? (a.toroPreñez || "—") : "—"}</td>
                   <td className="txt-muted" style={{ maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.obs || "—"}</td>
                   {puedeEditar && (
                     <td>

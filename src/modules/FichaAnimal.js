@@ -114,7 +114,11 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
     // misma desincronización que motivó este fix (iatf ✅ viejo vs. estado
     // del animal ya cambiado por otro lado).
     if (updateAnimal && (formIatf.resultado === "✅" || formIatf.resultado === "❌")) {
-      await updateAnimal(animal.id, { ...animal, estado: formIatf.resultado === "✅" ? "Preñada" : "Vacía" });
+      await updateAnimal(animal.id, {
+        ...animal,
+        estado: formIatf.resultado === "✅" ? "Preñada" : "Vacía",
+        toroPreñez: formIatf.resultado === "✅" ? animal.toroPreñez : "",
+      });
     }
     setGuardando(false);
     setEditandoIatfId(null);

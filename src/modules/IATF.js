@@ -15,10 +15,16 @@ import { formatDisplay, addDays } from "../lib/dateUtils";
 // se hace 7 días post-ovulación fija (~día17), no en el día10 de la IATF —
 // por eso el campo que se completa cambia según tipoServicio.
 function autocompletarProtocolo(dia0, tipoServicio) {
-  if (!dia0) return {};
+  // Al cambiar el tipo de servicio hay que borrar los campos del tipo
+  // anterior, no solo completar los nuevos — si una vaca pasa de TE a IATF
+  // (o viceversa) sin esto, quedan fechaTransferencia/donante o día10
+  // pegados de la asignación vieja, y el reporte los sigue mostrando como
+  // si fueran válidos para el tipo de servicio actual.
+  const limpiar = tipoServicio === "TE" ? { dia10: "" } : { fechaTransferencia: "", donante: "" };
+  if (!dia0) return limpiar;
   return tipoServicio === "TE"
-    ? { dia8: addDays(dia0, 8), fechaTransferencia: addDays(dia0, 17) }
-    : { dia8: addDays(dia0, 8), dia10: addDays(dia0, 10) };
+    ? { ...limpiar, dia8: addDays(dia0, 8), fechaTransferencia: addDays(dia0, 17) }
+    : { ...limpiar, dia8: addDays(dia0, 8), dia10: addDays(dia0, 10) };
 }
 
 // Toros de partida — coinciden con los que ya se usan en la estancia.

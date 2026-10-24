@@ -266,7 +266,9 @@ export function Reportes({ animales, rol }) {
           body: datosIatf.map((i) => [
             i.campania || "2025", rondaDe(i), i.caravana || "", i.lote || "", i.tipoServicio || "IATF",
             i.tipoServicio === "TE" ? `${i.donante || "—"} / ${i.toro || "—"}` : i.toro || "—",
-            formatDisplay(i.dia0) || "—", formatDisplay(i.dia10) || "—", formatDisplay(i.fechaTransferencia) || "—",
+            formatDisplay(i.dia0) || "—",
+            i.tipoServicio === "TE" ? "—" : formatDisplay(i.dia10) || "—",
+            i.tipoServicio === "TE" ? formatDisplay(i.fechaTransferencia) || "—" : "—",
             i.resultado === "✅" ? "Preñada" : i.resultado === "⏳" ? "Pendiente" : "Vacía",
             (i.obs || "—").slice(0, 25),
           ]),

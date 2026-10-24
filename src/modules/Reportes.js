@@ -277,6 +277,34 @@ export function Reportes({ animales, rol }) {
           didDrawPage: () => header(),
         });
 
+        // Resumen de aptitud/protocolo por ronda+tipo — cuántas van a cada
+        // tanda (IATF-1/IATF-2/TE-1...) y en qué estado de preparación están
+        // (apta, no apta, protocolo ya aplicado) antes del día 0.
+        const resumenRondas = {};
+        datosIatf.forEach((i) => {
+          const key = `${rondaDe(i)} · ${i.tipoServicio || "IATF"}`;
+          if (!resumenRondas[key]) resumenRondas[key] = { total: 0, aptas: 0, noAptas: 0, protocolo: 0 };
+          const r = resumenRondas[key];
+          r.total++;
+          if (i.apta === "Apta") r.aptas++; else r.noAptas++;
+          if (i.protocolo === "Si" && i.apta === "Apta") r.protocolo++;
+        });
+        const totalRondas = Object.values(resumenRondas).reduce(
+          (acc, r) => ({ total: acc.total + r.total, aptas: acc.aptas + r.aptas, noAptas: acc.noAptas + r.noAptas, protocolo: acc.protocolo + r.protocolo }),
+          { total: 0, aptas: 0, noAptas: 0, protocolo: 0 }
+        );
+        runAutoTable(doc, {
+          head: [["Ronda / Tipo", "Total", "Aptas", "No aptas", "Protocolo aplicado"]],
+          body: [
+            ...Object.entries(resumenRondas).sort(([a], [b]) => a.localeCompare(b)).map(([k, r]) => [k, r.total, r.aptas, r.noAptas, r.protocolo]),
+            ["TOTAL", totalRondas.total, totalRondas.aptas, totalRondas.noAptas, totalRondas.protocolo],
+          ],
+          startY: doc.lastAutoTable.finalY + 8,
+          margin: { left: 12, right: 12, bottom: 12 }, tableWidth: 140,
+          styles: commonStyles, headStyles: commonHead, alternateRowStyles: commonAlt,
+          didDrawPage: () => header(),
+        });
+
         // Resumen final — cuántas vacas por categoría+tipo de servicio, y
         // cuántas pajuelas/servicios por toro (para calcular semen/pajuelas
         // a comprar antes de arrancar la campaña).

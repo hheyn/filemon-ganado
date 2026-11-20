@@ -5,9 +5,10 @@ import { useSorter } from "../hooks/useSorter";
 import { Modal } from "../components/Modal";
 import { Icono } from "../components/Icon";
 import { Field, Input, Select, Button, Badge } from "../components/Field";
-import { LOTES, TIPOS_SERVICIO, RONDAS_SUGERIDAS, C } from "../lib/constants";
+import { LOTES, TIPOS_SERVICIO, RONDAS_SUGERIDAS, ESTADOS_SERVICIO, MOTIVOS_NO_SERVICIO, C } from "../lib/constants";
 import { canEdit } from "../lib/permissions";
-import { formatDisplay, addDays } from "../lib/dateUtils";
+import { formatDisplay, addDays, today } from "../lib/dateUtils";
+import { cerrarRondasPendientes, origenSegunTipo } from "../lib/servicios";
 
 // Protocolo estándar de sincronización (dispositivo 8 días): día8 = retiro
 // del dispositivo, día10 = IATF a tiempo fijo (48-56h post-retiro). Para TE
@@ -121,7 +122,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
 
   const blank = {
     caravana: "", lote: "General", campania: "", ronda: "IATF-1",
-    apta: "Apta", protocolo: "Si", tipoServicio: "IATF", toro: "",
+    apta: "Apta", protocolo: "Pendiente", motivoNoIatf: "", tipoServicio: "IATF", toro: "",
     dia0: "", dia8: "", dia10: "",
     donante: "", fechaTransferencia: "",
     resultado: "⏳", origenPreniez: "", motivoVacia: "", obs: "",
@@ -205,13 +206,83 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
   const guardar = async () => {
     if (!form.caravana) return;
     const data = { ...form, ronda: form.ronda || "IATF-1" };
+    let id = editandoId;
     if (editandoId) {
       await updateIatfDoc(editandoId, data);
     } else {
-      await addIatf({ ...data, creadoEn: serverTimestamp() });
+      id = (await addIatf({ ...data, creadoEn: serverTimestamp() })).id;
     }
     await sincronizarAnimal(data);
+    if (data.resultado === "✅") {
+      await cerrarRondasPendientes({ caravana: data.caravana, campania: data.campania, rondaPrenez: data.ronda, excluirId: id });
+    }
     cancelar();
+  };
+
+  // --- Diagnóstico de preñez en bloque (ecografía en la manga) ---
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagRonda, setDiagRonda] = useState("");
+  const [diagFecha, setDiagFecha] = useState(today());
+  const [diagMarcas, setDiagMarcas] = useState({});
+  const [diagGuardando, setDiagGuardando] = useState(false);
+
+  const campaniaDiag = campaniaF !== "Todas" ? campaniaF : campanias[0];
+  // Solo vacas efectivamente servidas en la ronda y sin diagnóstico todavía.
+  const porDiagnosticar = iatf.filter((i) => (i.campania || "") === campaniaDiag && i.protocolo === "Si" && i.resultado === "⏳");
+  const rondasDiag = [...new Set(porDiagnosticar.map(rondaDe))];
+  const filasDiag = sortFn(porDiagnosticar.filter((i) => rondaDe(i) === diagRonda));
+
+  const abrirDiagnostico = () => {
+    setDiagRonda(rondasDiag[0] || "");
+    setDiagFecha(today());
+    setDiagMarcas({});
+    setShowDiag(true);
+  };
+
+  const marcar = (id, cambios) => setDiagMarcas((prev) => ({ ...prev, [id]: { ...prev[id], ...cambios } }));
+
+  const guardarDiagnostico = async () => {
+    setDiagGuardando(true);
+    for (const reg of filasDiag) {
+      const m = diagMarcas[reg.id];
+      if (!m?.resultado) continue;
+      const cambios = {
+        resultado: m.resultado,
+        origenPreniez: m.resultado === "✅" ? origenSegunTipo(reg.tipoServicio) : "",
+        motivoVacia: m.resultado === "❌" ? (m.motivoVacia || "") : "",
+        fechaDiagnostico: diagFecha,
+      };
+      await updateIatfDoc(reg.id, cambios);
+      await sincronizarAnimal({ ...reg, ...cambios });
+      if (m.resultado === "✅") {
+        await cerrarRondasPendientes({ caravana: reg.caravana, campania: reg.campania, rondaPrenez: rondaDe(reg), excluirId: reg.id });
+      }
+    }
+    setDiagGuardando(false);
+    setShowDiag(false);
+  };
+  const marcadas = filasDiag.filter((r) => diagMarcas[r.id]?.resultado);
+
+  // --- Servicio realizado en bloque (día de la IATF / de la transferencia) ---
+  const [showReal, setShowReal] = useState(false);
+  const [realRonda, setRealRonda] = useState("");
+  const [realExcluidas, setRealExcluidas] = useState(new Set());
+  const [realGuardando, setRealGuardando] = useState(false);
+  const pendientesServicio = iatf.filter((i) => (i.campania || "") === campaniaDiag && (i.protocolo === "Pendiente" || !i.protocolo) && i.apta === "Apta");
+  const rondasReal = [...new Set(pendientesServicio.map(rondaDe))];
+  const filasReal = sortFn(pendientesServicio.filter((i) => rondaDe(i) === realRonda));
+  const abrirRealizado = () => {
+    setRealRonda(rondasReal[0] || "");
+    setRealExcluidas(new Set());
+    setShowReal(true);
+  };
+  const guardarRealizado = async () => {
+    setRealGuardando(true);
+    for (const r of filasReal) {
+      if (!realExcluidas.has(r.id)) await updateIatfDoc(r.id, { protocolo: "Si" });
+    }
+    setRealGuardando(false);
+    setShowReal(false);
   };
 
   const eliminar = async (id) => {
@@ -314,7 +385,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
       campania: porLoteShared.campania,
       ronda,
       apta: "Apta",
-      protocolo: porLoteShared.tipoServicio === "Repaso Toro" ? "No" : "Si",
+      protocolo: porLoteShared.tipoServicio === "Repaso Toro" ? "Si" : "Pendiente",
       tipoServicio: porLoteShared.tipoServicio,
       toro: porLoteShared.toro,
       dia0: porLoteShared.dia0,
@@ -366,7 +437,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
       campania: candCampania,
       ronda,
       apta: "Apta",
-      protocolo: candShared.tipoServicio === "Repaso Toro" ? "No" : "Si",
+      protocolo: candShared.tipoServicio === "Repaso Toro" ? "Si" : "Pendiente",
       tipoServicio: candShared.tipoServicio,
       toro: candShared.toro,
       dia0: candShared.dia0,
@@ -425,18 +496,30 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
               <Select
                 options={["Apta", "No Apta"]}
                 value={form.apta}
-                onChange={(e) => setForm({ ...form, apta: e.target.value, protocolo: e.target.value === "No Apta" ? "No" : form.protocolo })}
+                onChange={(e) => setForm({ ...form, apta: e.target.value, protocolo: e.target.value === "No Apta" ? "No" : form.protocolo, motivoNoIatf: e.target.value === "No Apta" ? (form.motivoNoIatf || "No apta (estado corporal)") : form.motivoNoIatf })}
               />
             </Field>
-            <Field label={esTE ? "¿Se realizó la transferencia?" : <><Icono nombre="sanidad" size={14} /> Se realizó la IATF</>}>
+            <Field label={esTE ? "¿Se realizó la transferencia?" : form.tipoServicio === "Repaso Toro" ? "¿Entró con el toro?" : <><Icono nombre="sanidad" size={14} /> ¿Se realizó la IATF?</>}>
               <Select
-                value={form.protocolo}
-                onChange={(e) => setForm({ ...form, protocolo: e.target.value, resultado: e.target.value === "No" ? "❌" : form.resultado })}
-                disabled={form.apta === "No Apta"}
-                options={[{ value: "Si", label: "✅ Sí" }, { value: "No", label: "❌ No" }]}
+                value={form.protocolo || "Pendiente"}
+                onChange={(e) => setForm({ ...form, protocolo: e.target.value, ...(e.target.value !== "Si" ? { resultado: "⏳", origenPreniez: "" } : {}) })}
+                options={ESTADOS_SERVICIO}
               />
             </Field>
           </div>
+          {form.protocolo === "No" && (
+            <div className="form-row">
+              <Field label="Motivo">
+                <Select
+                  value={form.motivoNoIatf || ""}
+                  onChange={(e) => setForm({ ...form, motivoNoIatf: e.target.value })}
+                  placeholder="Elegí el motivo"
+                  options={[...new Set([...MOTIVOS_NO_SERVICIO, ...(form.motivoNoIatf ? [form.motivoNoIatf] : [])])]}
+                />
+              </Field>
+              <div />
+            </div>
+          )}
           <div className="form-row">
             <Field label={<><Icono nombre="fecha" size={14} /> {esTE ? "Día 0 (sincronización receptora)" : "Día 0 (dispositivo)"}</>}>
               <Input type="date" value={form.dia0 || ""} onChange={(e) => setForm({ ...form, dia0: e.target.value, ...autocompletarProtocolo(e.target.value, form.tipoServicio) })} />
@@ -510,6 +593,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
             <Field label="Resultado">
               <Select
                 value={form.resultado}
+                disabled={form.protocolo !== "Si"}
                 onChange={(e) => setForm({ ...form, resultado: e.target.value, origenPreniez: e.target.value === "✅" ? (form.origenPreniez || (esTE ? "TE" : "IATF")) : "" })}
                 options={[{ value: "⏳", label: "⏳ Pendiente" }, { value: "✅", label: "✅ Preñada" }, { value: "❌", label: "❌ Vacía" }]}
               />
@@ -545,6 +629,102 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
             <Button variant="verde" onClick={guardar}><Icono nombre="guardar" size={14} /> {editandoId ? "Guardar cambios" : "Guardar"}</Button>
             <Button variant="ghost" sm onClick={cancelar}>Cancelar</Button>
           </div>
+        </Modal>
+      )}
+
+      {showReal && (
+        <Modal onClose={() => setShowReal(false)} title={<><Icono nombre="servicios" size={14} /> Servicio realizado — {campaniaDiag}</>} wide>
+          {rondasReal.length === 0 ? (
+            <div className="txt-muted">No hay servicios pendientes de vacas aptas en la campaña {campaniaDiag}.</div>
+          ) : (
+            <>
+              <Field label="Ronda">
+                <Select value={realRonda} onChange={(e) => { setRealRonda(e.target.value); setRealExcluidas(new Set()); }} options={rondasReal} />
+              </Field>
+              <div className="txt-muted mb" style={{ fontSize: 12 }}>
+                Destildá las que no se inseminaron / no recibieron el embrión — quedan pendientes y después podés marcarlas como "no realizado" con su motivo.
+              </div>
+              <div className="tbl-wrap" style={{ maxHeight: 380, overflowY: "auto" }}>
+                <table>
+                  <thead><tr><th></th><th>Caravana</th><th>Lote</th><th>Tipo</th><th>Fecha</th></tr></thead>
+                  <tbody>
+                    {filasReal.map((r) => (
+                      <tr key={r.id} onClick={() => setRealExcluidas((prev) => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} style={{ cursor: "pointer" }}>
+                        <td><input type="checkbox" readOnly checked={!realExcluidas.has(r.id)} /></td>
+                        <td><strong>{r.caravana}</strong></td>
+                        <td>{r.lote}</td>
+                        <td>{tipoDe(r)}</td>
+                        <td>{formatDisplay(tipoDe(r) === "TE" ? r.fechaTransferencia : r.dia10) || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex mt">
+                <Button variant="verde" onClick={guardarRealizado} disabled={realGuardando || filasReal.length === realExcluidas.size}>
+                  <Icono nombre="guardar" size={14} /> {realGuardando ? "Guardando…" : `Marcar ${filasReal.length - realExcluidas.size} como realizado`}
+                </Button>
+                <Button variant="ghost" sm onClick={() => setShowReal(false)}>Cancelar</Button>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {showDiag && (
+        <Modal onClose={() => setShowDiag(false)} title={<><Icono nombre="positivo" size={14} /> Diagnóstico de preñez — {campaniaDiag}</>} wide>
+          {rondasDiag.length === 0 ? (
+            <div className="txt-muted">No hay vacas servidas sin diagnóstico en la campaña {campaniaDiag}. Una vaca aparece acá cuando su servicio figura como realizado ("¿Se realizó?" = Sí) y todavía no tiene resultado.</div>
+          ) : (
+            <>
+              <div className="form-row">
+                <Field label="Ronda">
+                  <Select value={diagRonda} onChange={(e) => { setDiagRonda(e.target.value); setDiagMarcas({}); }} options={rondasDiag} />
+                </Field>
+                <Field label={<><Icono nombre="fecha" size={14} /> Fecha de la ecografía</>}>
+                  <Input type="date" value={diagFecha} onChange={(e) => setDiagFecha(e.target.value)} />
+                </Field>
+              </div>
+              <div className="txt-muted mb" style={{ fontSize: 12 }}>
+                Las que marques preñadas salen solas de las rondas siguientes que tengan pendientes (quedan registradas como "no realizado — preñada en {diagRonda}"). Las que dejes sin marcar siguen sin diagnóstico.
+              </div>
+              <div className="tbl-wrap" style={{ maxHeight: 380, overflowY: "auto" }}>
+                <table>
+                  <thead><tr><th>Caravana</th><th>Lote</th><th>Tipo</th><th>Resultado</th><th>Motivo (vacía)</th></tr></thead>
+                  <tbody>
+                    {filasDiag.map((r) => {
+                      const m = diagMarcas[r.id] || {};
+                      return (
+                        <tr key={r.id}>
+                          <td><strong>{r.caravana}</strong></td>
+                          <td>{r.lote}</td>
+                          <td>{tipoDe(r)}</td>
+                          <td>
+                            <div className="flex" style={{ gap: 6 }}>
+                              <Button sm variant={m.resultado === "✅" ? "verde" : "ghost"} onClick={() => marcar(r.id, { resultado: m.resultado === "✅" ? "" : "✅" })}>Preñada</Button>
+                              <Button sm variant={m.resultado === "❌" ? "rojo" : "ghost"} onClick={() => marcar(r.id, { resultado: m.resultado === "❌" ? "" : "❌" })}>Vacía</Button>
+                            </div>
+                          </td>
+                          <td>
+                            {m.resultado === "❌" && (
+                              <Select value={m.motivoVacia || ""} onChange={(e) => marcar(r.id, { motivoVacia: e.target.value })} placeholder="Sin especificar" options={MOTIVOS_VACIA} />
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex mt">
+                <Button variant="verde" onClick={guardarDiagnostico} disabled={!marcadas.length || diagGuardando}>
+                  <Icono nombre="guardar" size={14} /> {diagGuardando ? "Guardando…" : `Guardar ${marcadas.length} diagnóstico${marcadas.length === 1 ? "" : "s"}`}
+                  {marcadas.length > 0 && ` (${marcadas.filter((r) => diagMarcas[r.id].resultado === "✅").length} preñadas)`}
+                </Button>
+                <Button variant="ghost" sm onClick={() => setShowDiag(false)}>Cancelar</Button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 
@@ -669,6 +849,8 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         <div className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
           {puedeEditar && <Button variant="ghost" sm onClick={() => setShowToros(true)}><Icono nombre="toro" size={14} /> Toros</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirPorLote}><Icono nombre="hacienda" size={14} /> Cargar por lote</Button>}
+          {puedeEditar && <Button variant="ghost" sm onClick={abrirRealizado}><Icono nombre="servicios" size={14} /> Servicio realizado</Button>}
+          {puedeEditar && <Button variant="verde" sm onClick={abrirDiagnostico}><Icono nombre="positivo" size={14} /> Diagnóstico</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirCandidatas}><Icono nombre="repasoResincro" size={14} /> Candidatas a repaso</Button>}
           {puedeEditar && <Button variant="prim" sm onClick={() => setShowForm(!showForm)}>{showForm ? <Icono nombre="cerrar" size={14} /> : <Icono nombre="agregar" size={14} />}</Button>}
         </div>
@@ -765,11 +947,11 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
                     <td><Badge tone="cielo">{i.lote}</Badge></td>
                     <td><Badge tone={i.apta === "Apta" ? "verde" : "rojo"}>{i.apta === "Apta" ? "✓ Apta" : "✗ No"}</Badge></td>
                     <td style={{ textAlign: "center" }}>
-                      {i.apta === "No Apta"
-                        ? <span className="txt-muted">—</span>
+                      {i.protocolo === "Si"
+                        ? <Badge tone="verde">✔ Sí</Badge>
                         : i.protocolo === "No"
-                          ? <Badge tone="rojo">✗ No</Badge>
-                          : <Badge tone="verde">✔ Sí</Badge>}
+                          ? <span title={i.motivoNoIatf || ""}><Badge tone="rojo">✗ No</Badge></span>
+                          : <Badge tone="paja">Pend.</Badge>}
                     </td>
                     <td><span className={`badge ${tipoTone(tipo)}`} style={{ fontSize: 9 }}>{tipo}</span></td>
                     <td style={{ fontSize: 10, color: "rgba(21,21,15,.6)" }}>{formatDisplay(i.dia0) || "—"}</td>

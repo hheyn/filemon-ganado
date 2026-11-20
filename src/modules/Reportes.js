@@ -269,7 +269,9 @@ export function Reportes({ animales, rol }) {
             formatDisplay(i.dia0) || "—",
             i.tipoServicio === "TE" ? "—" : formatDisplay(i.dia10) || "—",
             i.tipoServicio === "TE" ? formatDisplay(i.fechaTransferencia) || "—" : "—",
-            i.resultado === "✅" ? "Preñada" : i.resultado === "⏳" ? "Pendiente" : "Vacía",
+            i.protocolo === "No" ? `No realizado${i.motivoNoIatf ? ` (${i.motivoNoIatf})` : ""}`
+              : i.protocolo !== "Si" ? "Programado"
+              : i.resultado === "✅" ? "Preñada" : i.resultado === "⏳" ? "Sin diagnóstico" : "Vacía",
             (i.obs || "—").slice(0, 25),
           ]),
           startY: 24, margin: { left: 12, right: 12, bottom: 12 },
@@ -294,7 +296,7 @@ export function Reportes({ animales, rol }) {
           { total: 0, aptas: 0, noAptas: 0, protocolo: 0 }
         );
         runAutoTable(doc, {
-          head: [["Ronda / Tipo", "Total", "Aptas", "No aptas", "Protocolo aplicado"]],
+          head: [["Ronda / Tipo", "Total", "Aptas", "No aptas", "Servicio realizado"]],
           body: [
             ...Object.entries(resumenRondas).sort(([a], [b]) => a.localeCompare(b)).map(([k, r]) => [k, r.total, r.aptas, r.noAptas, r.protocolo]),
             ["TOTAL", totalRondas.total, totalRondas.aptas, totalRondas.noAptas, totalRondas.protocolo],

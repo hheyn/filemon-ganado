@@ -71,7 +71,27 @@ export const TIPOS_SERVICIO = ["IATF", "TE", "Repaso Toro"];
 // Rondas típicas dentro de una campaña — es una lista sugerida, no cerrada:
 // el módulo Servicios permite escribir el nombre de ronda que corresponda
 // (ver plan: "Rondas de servicio dentro de una campaña").
-export const RONDAS_SUGERIDAS = ["IATF-1", "Resincro-TE", "Repaso Toro"];
+export const RONDAS_SUGERIDAS = ["IATF-1", "IATF-2", "TE-1", "Repaso Toro"];
+
+// Estado de ejecución de un servicio (campo `protocolo` en `iatf`, nombre
+// heredado de la app vieja). Es independiente del resultado: un servicio
+// programado a futuro está "Pendiente", no "No realizado" — antes solo
+// existían Sí/No y marcar "No" ponía el resultado en vacía, lo que hacía
+// figurar como vacías a vacas cuya ronda todavía no había ocurrido.
+export const ESTADOS_SERVICIO = [
+  { value: "Pendiente", label: "⏳ Todavía no" },
+  { value: "Si", label: "✅ Sí" },
+  { value: "No", label: "✗ No (salió del protocolo)" },
+];
+
+export const MOTIVOS_NO_SERVICIO = [
+  "Preñada en ronda anterior",
+  "No apta (estado corporal)",
+  "No apta (útero / ovarios)",
+  "Parto reciente (menos de 45 días)",
+  "Descarte / venta",
+  "Otro",
+];
 
 export const ROLES = {
   ADMIN: "admin",

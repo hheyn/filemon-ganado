@@ -6,6 +6,7 @@ import { Modal } from "../components/Modal";
 import { Icono } from "../components/Icon";
 import { Field, Input, Select, Button, Badge, BadgeEstado } from "../components/Field";
 import { canEdit } from "../lib/permissions";
+import { cerrarRondasPendientes } from "../lib/servicios";
 
 const MOTIVOS_VACIA = [
   "No repitió celo (vacía real)",
@@ -138,6 +139,10 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
     if (!editandoIatfId || !formIatf) return;
     setGuardando(true);
     await updateIatfDoc(editandoIatfId, formIatf);
+    if (formIatf.resultado === "✅") {
+      const reg = iatf.find((i) => i.id === editandoIatfId);
+      if (reg) await cerrarRondasPendientes({ caravana: reg.caravana, campania: reg.campania, rondaPrenez: reg.ronda || "IATF-1", excluirId: reg.id });
+    }
     // Mismo criterio que IATF.js sincronizarAnimal(): el resultado del
     // servicio es la fuente de verdad del estado reproductivo del animal —
     // si se corrige acá, el estado tiene que moverse con él, si no queda la

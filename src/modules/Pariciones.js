@@ -8,6 +8,7 @@ import { Modal } from "../components/Modal";
 import { Field, Input, Select, Button, Badge } from "../components/Field";
 import { canEdit } from "../lib/permissions";
 import { today } from "../lib/dateUtils";
+import { renombrarCaravana } from "../lib/vinculos";
 
 const TIPOS_PARTO = ["Normal", "Distócico", "Cesárea", "Gemelar", "Mortinato"];
 
@@ -45,11 +46,48 @@ export function Pariciones({ animales, addAnimal, removeAnimal, updateAnimal, ro
     setShowForm(false);
   };
 
+  // El parto es la fuente de verdad del origen de la cría: si se corrige la
+  // fecha, el peso, la madre o la caravana del ternero en el parto, la ficha
+  // de la cría tiene que reflejarlo (antes quedaban dos versiones distintas).
+  const sincronizarCria = async (previo, nuevo) => {
+    const carVieja = (previo?.terneroCar || "").trim();
+    const carNueva = nuevo.terneroCar;
+    const cria =
+      animales.find((a) => a.caravana === carVieja && (!a.madreCaravana || a.madreCaravana === previo.madreCaravana)) ||
+      animales.find((a) => a.caravana === carNueva);
+    if (!cria) return;
+    const renombra = carNueva && carNueva !== "—" && carNueva !== cria.caravana;
+    if (renombra && animales.some((a) => a.id !== cria.id && a.caravana.trim().toLowerCase() === carNueva.toLowerCase())) {
+      window.alert(`Ya existe otro animal con caravana "${carNueva}" — la ficha de la cría no se renombró.`);
+      return;
+    }
+    const patch = {
+      ...cria,
+      caravana: renombra ? carNueva : cria.caravana,
+      madreCaravana: nuevo.madreCaravana,
+      fechaNac: nuevo.fecha,
+      pesoInicial: +nuevo.pesoNac || cria.pesoInicial || "",
+    };
+    if (["Ternero", "Ternera"].includes(cria.categoria)) patch.categoria = nuevo.terneroSexo === "H" ? "Ternera" : "Ternero";
+    await updateAnimal(cria.id, patch);
+    if (renombra) await renombrarCaravana(cria.caravana, carNueva, { madre: nuevo.madreCaravana });
+  };
+
   const guardar = async () => {
     if (!form.madreCaravana) return;
+    const carCria = (form.terneroCar || "").trim();
     if (editId) {
-      await updatePar(editId, { ...form, pesoNac: +form.pesoNac || 0 });
+      const previo = pariciones.find((p) => p.id === editId);
+      await updatePar(editId, { ...form, terneroCar: carCria, pesoNac: +form.pesoNac || 0 });
+      await sincronizarCria(previo, { ...form, terneroCar: carCria });
       cerrar();
+      return;
+    }
+    // Una caravana de cría repetida (ej. dos partos con la misma provisoria)
+    // dejaba al segundo ternero sin ficha propia y al parto apuntando a otro
+    // animal — se bloquea acá en vez de descubrirlo después.
+    if (carCria && carCria !== "—" && animales.some((a) => a.caravana.trim().toLowerCase() === carCria.toLowerCase())) {
+      window.alert(`Ya existe un animal con caravana "${carCria}". Usá otra caravana para la cría.`);
       return;
     }
 

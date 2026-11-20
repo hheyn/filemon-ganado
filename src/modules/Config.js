@@ -76,6 +76,57 @@ export function Config({ animales, rol }) {
   );
   const totalProblemas = auditoriaCategorias.length + auditoriaEstados.length + auditoriaLotes.length + auditoriaUbicaciones.length;
 
+  // Vínculos entre colecciones: todo se relaciona por número de caravana, así
+  // que un registro que apunta a una caravana inexistente (o una cría sin su
+  // parto) es información que la app ya no puede cruzar sola.
+  const vinculos = useMemo(() => {
+    const vivos = new Map((animales || []).map((a) => [a.caravana, a]));
+    const enBajas = new Set((bajas || []).filter((b) => !b.eliminado).map((b) => b.caravana));
+    const partos = (pariciones || []).filter((p) => !p.eliminado);
+    const CRIAS = ["Ternero", "Ternera", "Desmamante Macho", "Desmamante Hembra"];
+    const campActual = [...new Set((iatf || []).map((i) => i.campania || ""))].sort().pop();
+    return [
+      {
+        titulo: "Crías sin madre registrada",
+        items: (animales || []).filter((a) => CRIAS.includes(a.categoria) && !a.madreCaravana).map((a) => a.caravana),
+      },
+      {
+        titulo: "Partos sin caravana de cría (no mortinato)",
+        items: partos.filter((p) => p.tipo !== "Mortinato" && p.estado !== "Baja" && (!p.terneroCar || p.terneroCar === "—"))
+          .map((p) => `madre ${p.madreCaravana} (${p.fecha})`),
+      },
+      {
+        titulo: "Partos cuya cría no está en Hacienda ni en Bajas",
+        items: partos.filter((p) => p.terneroCar && p.terneroCar !== "—" && p.tipo !== "Mortinato" && !vivos.has(p.terneroCar) && !enBajas.has(p.terneroCar))
+          .map((p) => `cría ${p.terneroCar} de ${p.madreCaravana} (${p.fecha})`),
+      },
+      {
+        titulo: "Cría con datos distintos a los de su parto",
+        items: partos.flatMap((p) => {
+          const c = vivos.get(p.terneroCar);
+          if (!c) return [];
+          const d = [];
+          if (c.madreCaravana !== p.madreCaravana) d.push("madre");
+          if (c.fechaNac !== p.fecha) d.push("fecha");
+          if (+p.pesoNac > 0 && +c.pesoInicial !== +p.pesoNac) d.push("peso");
+          return d.length ? [`${c.caravana} (${d.join(", ")})`] : [];
+        }),
+      },
+      {
+        titulo: "Animales en Hacienda que también figuran dados de baja",
+        items: (animales || []).filter((a) => enBajas.has(a.caravana)).map((a) => a.caravana),
+      },
+      {
+        titulo: `Servicios ${campActual || ""} de caravanas que no existen en Hacienda`,
+        items: (iatf || []).filter((i) => (i.campania || "") === campActual && !vivos.has(i.caravana)).map((i) => `${i.caravana} (${i.ronda || "IATF-1"})`),
+      },
+      {
+        titulo: "Preñadas sin ningún servicio con resultado preñada",
+        items: (animales || []).filter((a) => a.estado === "Preñada" && !(iatf || []).some((i) => i.caravana === a.caravana && i.resultado === "✅")).map((a) => a.caravana),
+      },
+    ].filter((v) => v.items.length);
+  }, [animales, bajas, pariciones, iatf]);
+
   if (!isAdmin(rol)) {
     return <div className="card txt-muted" style={{ padding: 16 }}>No tenés permiso para ver este módulo.</div>;
   }
@@ -151,6 +202,24 @@ export function Config({ animales, rol }) {
           )
         )}
         {!totalProblemas && <div className="txt-muted" style={{ fontSize: 12 }}><Icono nombre="positivo" size={14} /> No se encontraron valores fuera del catálogo actual.</div>}
+      </div>
+
+      <div className="card mb" style={{ padding: 14 }}>
+        <div className="flex" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: C.cuero }}><Icono nombre="buscar" size={16} /> Auditoría de vínculos — partos, crías, servicios</div>
+          <Badge tone={vinculos.length ? "rojo" : "verde"}>{vinculos.length ? `${vinculos.reduce((n, v) => n + v.items.length, 0)} a revisar` : "Todo conectado"}</Badge>
+        </div>
+        <p className="txt-muted" style={{ fontSize: 11.5, marginBottom: 10 }}>
+          Registros que apuntan a una caravana que no existe, o crías que no están conectadas a su parto. Mientras figuren
+          acá, la ficha del animal no puede mostrar su historia completa.
+        </p>
+        {vinculos.map(({ titulo, items }) => (
+          <div key={titulo} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: C.urgente, marginBottom: 4 }}>{titulo} ({items.length})</div>
+            <div className="txt-muted" style={{ fontSize: 11.5 }}>{items.slice(0, 15).join(" · ")}{items.length > 15 ? " …" : ""}</div>
+          </div>
+        ))}
+        {!vinculos.length && <div className="txt-muted" style={{ fontSize: 12 }}><Icono nombre="positivo" size={14} /> Todos los partos, crías y servicios están vinculados.</div>}
       </div>
 
       <div className="card mb" style={{ padding: 14 }}>

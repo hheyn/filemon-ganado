@@ -3,6 +3,7 @@ import { CATEGORIAS, ESTADOS, LOTES, UBICACIONES, C } from "../lib/constants";
 import { today } from "../lib/dateUtils";
 import { canEdit } from "../lib/permissions";
 import { moverAnimales } from "../lib/rotaciones";
+import { renombrarCaravana, vincularPartoSinCria } from "../lib/vinculos";
 import { useCollection } from "../hooks/useCollection";
 import { useSorter } from "../hooks/useSorter";
 import { useColumnFilter } from "../hooks/useColumnFilter";
@@ -81,6 +82,16 @@ export function Hacienda({ animales, addAnimal, updateAnimal, removeAnimal, rol,
     if (edit) {
       const animalPrevio = animales.find((a) => a.id === edit);
       await updateAnimal(edit, form);
+      const carVieja = animalPrevio?.caravana;
+      const carNueva = form.caravana.trim();
+      if (carVieja && carVieja !== carNueva) {
+        try {
+          await renombrarCaravana(carVieja, carNueva, { madre: animalPrevio.madreCaravana || undefined });
+        } catch {
+          setError(`Se cambió la caravana, pero no se pudieron actualizar todos sus registros vinculados (partos, servicios, sanidad). Avisale al administrador.`);
+          return;
+        }
+      }
       // Si cambió la ubicación, sincronizar con rotaciones vía la misma
       // función que usa Potreros — nunca reimplementar esta lógica acá.
       const ubicAnterior = animalPrevio?.ubicacion || "";
@@ -96,6 +107,7 @@ export function Hacienda({ animales, addAnimal, updateAnimal, removeAnimal, rol,
     } else {
       await addAnimal(form);
     }
+    await vincularPartoSinCria({ caravana: form.caravana.trim(), madreCaravana: form.madreCaravana, fechaNac: form.fechaNac }).catch(() => {});
     cerrar();
   };
 

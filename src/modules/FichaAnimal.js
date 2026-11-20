@@ -46,7 +46,7 @@ function edadTexto(fechaNac) {
 
 // Ficha del animal — "tres cifras arriba, el estado reproductivo en Tierra
 // Colorada, historial en lista seca" (manual de marca, sección 07).
-export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, updateAnimal }) {
+export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, updateAnimal, onAbrirFicha }) {
   const animal = animales.find((a) => a.caravana === caravana);
   const puedeEditarIatf = canEdit(rol, "iatf");
 
@@ -69,10 +69,40 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
 
   const iatf = (iatfD || []).filter((i) => i.caravana === animal.caravana);
   const pariciones = (parD || []).filter((p) => p.madreCaravana === animal.caravana);
-  const sanidad = (sanD || []).filter((s) => s.caravana === animal.caravana || (!s.caravana && s.lote === animal.lote));
+  // Sanidad por lote sin lista de caravanas: solo cuenta lo aplicado desde
+  // que el animal nació — si no, un ternero "heredaba" vacunas de su lote
+  // aplicadas antes de existir.
+  const sanidad = (sanD || []).filter((s) =>
+    s.caravana === animal.caravana ||
+    (s.caravanas || []).includes(animal.caravana) ||
+    (!s.caravana && !(s.caravanas || []).length && s.lote === animal.lote && (!animal.fechaNac || (s.fecha || "") >= animal.fechaNac))
+  );
   const pesajes = (pesD || []).filter((p) => (p.caravana ? p.caravana === animal.caravana : p.animalId === animal.id));
   const hijos = animales.filter((a) => a.madreCaravana === animal.caravana);
-  const ultimoPeso = [...pesajes].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))[0]?.peso || animal.pesoInicial || null;
+  const ultimoPesaje = [...pesajes].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))[0];
+
+  // Origen: el parto es la fuente principal; la ficha del animal cubre a los
+  // nacidos antes de que existiera el registro de partos.
+  const parto = (parD || []).find((p) => !p.eliminado && p.terneroCar === animal.caravana);
+  const madreCar = parto?.madreCaravana || animal.madreCaravana || "";
+  const fechaNac = animal.fechaNac || parto?.fecha || "";
+  // En adultos `pesoInicial` es el peso de alta en el rodeo, no de nacimiento.
+  const esCria = ["Ternero", "Ternera", "Desmamante Macho", "Desmamante Hembra"].includes(animal.categoria);
+  const pesoNac = +parto?.pesoNac || (esCria ? +animal.pesoInicial : 0) || null;
+  const padre = animal.padreCaravana || (() => {
+    if (!madreCar || !fechaNac) return "";
+    const servicio = (iatfD || []).find((i) => {
+      if (i.caravana !== madreCar || i.resultado !== "✅") return false;
+      const est = fechaPartoEstimada(i);
+      return est && Math.abs(daysBetween(est, fechaNac)) <= 60;
+    });
+    return servicio?.toro || "";
+  })();
+  const madreExiste = madreCar && animales.some((a) => a.caravana === madreCar);
+  const tieneOrigen = madreCar || fechaNac || pesoNac || padre;
+
+  const ultimoPeso = ultimoPesaje?.peso || pesoNac || +animal.pesoInicial || null;
+  const pesoEsNacimiento = !ultimoPesaje && !!pesoNac;
 
   // Preñez destacada: último IATF con resultado ✅ para esta caravana.
   const iatfPrenada = animal.estado === "Preñada"
@@ -148,10 +178,10 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
       <div className="grid3 mb">
         <div className="statbox" style={{ padding: 10, textAlign: "center" }}>
           <div className="t-dato">{ultimoPeso || "—"}</div>
-          <div className="statbox-lbl">{ultimoPeso ? "kg" : "peso"}</div>
+          <div className="statbox-lbl">{ultimoPeso ? (pesoEsNacimiento ? "kg al nacer" : "kg") : "peso"}</div>
         </div>
         <div className="statbox" style={{ padding: 10, textAlign: "center" }}>
-          <div className="t-dato">{edadTexto(animal.fechaNac)}</div>
+          <div className="t-dato">{edadTexto(fechaNac)}</div>
           <div className="statbox-lbl">edad</div>
         </div>
         <div className="statbox" style={{ padding: 10, textAlign: "center" }}>
@@ -173,16 +203,54 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
 
       {animal.obs && <div className="t-auxiliar mb">{animal.obs}</div>}
 
+      {tieneOrigen && (
+        <div className="mb">
+          <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)", marginBottom: 6 }}>Origen</div>
+          <div className="historial-list">
+            <div className="historial-item">
+              <span className="historial-fecha">Madre</span>
+              <span className="historial-texto">
+                {madreCar
+                  ? madreExiste && onAbrirFicha
+                    ? <button className="btn btn-ghost btn-sm" style={{ padding: "2px 8px", fontWeight: 700 }} onClick={() => onAbrirFicha(madreCar)}>Car. {madreCar}</button>
+                    : `Car. ${madreCar}${madreExiste ? "" : " (ya no está en el rodeo)"}`
+                  : "—"}
+              </span>
+            </div>
+            <div className="historial-item">
+              <span className="historial-fecha">Padre</span>
+              <span className="historial-texto">{padre || "—"}</span>
+            </div>
+            <div className="historial-item">
+              <span className="historial-fecha">Nacimiento</span>
+              <span className="historial-texto">
+                {fechaNac ? formatDisplay(fechaNac) : "—"}
+                {parto?.tipo ? ` · parto ${parto.tipo.toLowerCase()}` : ""}
+              </span>
+            </div>
+            <div className="historial-item">
+              <span className="historial-fecha">Peso al nacer</span>
+              <span className="historial-texto">{pesoNac ? `${pesoNac} kg` : "—"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {hijos.length > 0 && (
         <div className="mb">
           <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)", marginBottom: 6 }}>Crías ({hijos.length})</div>
           <div className="historial-list">
-            {hijos.map((h) => (
-              <div key={h.id} className="historial-item">
-                <span className="historial-texto">Car. {h.caravana} — {h.categoria}</span>
-                <BadgeEstado estado={h.estado} />
-              </div>
-            ))}
+            {[...hijos].sort((a, b) => (b.fechaNac || "").localeCompare(a.fechaNac || "")).map((h) => {
+              const p = (parD || []).find((x) => !x.eliminado && x.terneroCar === h.caravana);
+              const peso = +p?.pesoNac || +h.pesoInicial;
+              return (
+                <div key={h.id} className="historial-item" style={onAbrirFicha ? { cursor: "pointer" } : undefined} onClick={() => onAbrirFicha?.(h.caravana)}>
+                  <span className="historial-fecha">{formatDisplay(h.fechaNac || p?.fecha) || "—"}</span>
+                  <span className="historial-texto">Car. {h.caravana} — {h.categoria}{peso ? ` · ${peso} kg al nacer` : ""}</span>
+                  <BadgeEstado estado={h.estado} />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

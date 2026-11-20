@@ -100,7 +100,7 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
     return servicio?.toro || "";
   })();
   const madreExiste = madreCar && animales.some((a) => a.caravana === madreCar);
-  const tieneOrigen = madreCar || fechaNac || pesoNac || padre;
+  const tieneOrigen = madreCar || fechaNac || pesoNac || padre || animal.fechaDestete;
 
   const ultimoPeso = ultimoPesaje?.peso || pesoNac || +animal.pesoInicial || null;
   const pesoEsNacimiento = !ultimoPesaje && !!pesoNac;
@@ -237,6 +237,17 @@ export function FichaAnimal({ caravana, animales, rol, user, onEdit, onClose, up
               <span className="historial-fecha">Peso al nacer</span>
               <span className="historial-texto">{pesoNac ? `${pesoNac} kg` : "—"}</span>
             </div>
+            {animal.fechaDestete && (
+              <div className="historial-item">
+                <span className="historial-fecha">Destete</span>
+                <span className="historial-texto">
+                  {formatDisplay(animal.fechaDestete)}
+                  {+animal.pesoDestete > 0 && ` · ${animal.pesoDestete} kg`}
+                  {+animal.pesoDestete > 0 && pesoNac && fechaNac && daysBetween(animal.fechaDestete, fechaNac) > 0 &&
+                    ` · ganó ${((animal.pesoDestete - pesoNac) / daysBetween(animal.fechaDestete, fechaNac)).toFixed(2).replace(".", ",")} kg/día`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

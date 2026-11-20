@@ -263,6 +263,45 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
   };
   const marcadas = filasDiag.filter((r) => diagMarcas[r.id]?.resultado);
 
+  // --- Entrada al toro (repaso) ---
+  // Una vaca ya preñada en la campaña no entra al repaso (va con el toro pero
+  // no se la está sirviendo); tampoco se duplica si ya tiene su repaso cargado.
+  const torosRodeo = animales.filter((a) => a.categoria === "Toro").map((a) => a.caravana);
+  const [showToro, setShowToro] = useState(false);
+  const [toroFecha, setToroFecha] = useState(today());
+  const [toroNombre, setToroNombre] = useState("");
+  const [toroExcluidas, setToroExcluidas] = useState(new Set());
+  const [toroGuardando, setToroGuardando] = useState(false);
+  const regsCamp = iatf.filter((i) => (i.campania || "") === campaniaDiag);
+  const candidatasToro = [...new Set(regsCamp.filter((i) => i.protocolo !== "No" || i.resultado === "✅").map((i) => i.caravana))]
+    .filter((car) => {
+      const rs = regsCamp.filter((i) => i.caravana === car);
+      return !rs.some((i) => i.resultado === "✅") && !rs.some((i) => i.tipoServicio === "Repaso Toro");
+    })
+    .map((car) => ({ caravana: car, lote: animales.find((a) => a.caravana === car)?.lote || regsCamp.find((i) => i.caravana === car)?.lote || "" }))
+    .sort((a, b) => a.caravana.localeCompare(b.caravana, undefined, { numeric: true }));
+  const abrirToro = () => {
+    setToroFecha(today());
+    setToroNombre(torosRodeo[0] || "");
+    setToroExcluidas(new Set());
+    setShowToro(true);
+  };
+  const guardarToro = async () => {
+    setToroGuardando(true);
+    for (const v of candidatasToro) {
+      if (toroExcluidas.has(v.caravana)) continue;
+      await addIatf({
+        creadoEn: serverTimestamp(), caravana: v.caravana, lote: v.lote, campania: campaniaDiag,
+        ronda: "Repaso Toro", tipoServicio: "Repaso Toro", toro: toroNombre,
+        dia0: toroFecha, dia8: "", dia10: "", donante: "", fechaTransferencia: "",
+        apta: "Apta", protocolo: "Si", motivoNoIatf: "", resultado: "⏳", origenPreniez: "", motivoVacia: "",
+        obs: `Entrada al toro ${toroNombre} el ${formatDisplay(toroFecha)}`,
+      });
+    }
+    setToroGuardando(false);
+    setShowToro(false);
+  };
+
   // --- Servicio realizado en bloque (día de la IATF / de la transferencia) ---
   const [showReal, setShowReal] = useState(false);
   const [realRonda, setRealRonda] = useState("");
@@ -632,6 +671,44 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         </Modal>
       )}
 
+      {showToro && (
+        <Modal onClose={() => setShowToro(false)} title={<><Icono nombre="toro" size={14} /> Entrada al toro — {campaniaDiag}</>} wide>
+          <div className="txt-muted mb" style={{ fontSize: 12 }}>
+            Vacas de la campaña que todavía no están preñadas y no entraron al repaso. Las preñadas pueden ir con el toro igual, pero no se registran como servicio.
+          </div>
+          <div className="form-row">
+            <Field label={<><Icono nombre="fecha" size={14} /> Fecha de entrada</>}>
+              <Input type="date" value={toroFecha} onChange={(e) => setToroFecha(e.target.value)} />
+            </Field>
+            <Field label={<><Icono nombre="toro" size={14} /> Toro</>}>
+              <Select value={toroNombre} onChange={(e) => setToroNombre(e.target.value)} options={[...new Set([...torosRodeo, ...toros])]} placeholder="Elegí el toro" />
+            </Field>
+          </div>
+          {candidatasToro.length === 0 ? <div className="txt-muted">No quedan vacas sin preñar y sin repaso en esta campaña.</div> : (
+            <div className="tbl-wrap" style={{ maxHeight: 340, overflowY: "auto" }}>
+              <table>
+                <thead><tr><th></th><th>Caravana</th><th>Lote</th></tr></thead>
+                <tbody>
+                  {candidatasToro.map((v) => (
+                    <tr key={v.caravana} style={{ cursor: "pointer" }} onClick={() => setToroExcluidas((prev) => { const n = new Set(prev); if (n.has(v.caravana)) n.delete(v.caravana); else n.add(v.caravana); return n; })}>
+                      <td><input type="checkbox" readOnly checked={!toroExcluidas.has(v.caravana)} /></td>
+                      <td><strong>{v.caravana}</strong></td>
+                      <td>{v.lote}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex mt">
+            <Button variant="verde" onClick={guardarToro} disabled={toroGuardando || !toroNombre || candidatasToro.length === toroExcluidas.size}>
+              <Icono nombre="guardar" size={14} /> {toroGuardando ? "Guardando…" : `Registrar ${candidatasToro.length - toroExcluidas.size} entradas al toro`}
+            </Button>
+            <Button variant="ghost" sm onClick={() => setShowToro(false)}>Cancelar</Button>
+          </div>
+        </Modal>
+      )}
+
       {showReal && (
         <Modal onClose={() => setShowReal(false)} title={<><Icono nombre="servicios" size={14} /> Servicio realizado — {campaniaDiag}</>} wide>
           {rondasReal.length === 0 ? (
@@ -849,6 +926,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         <div className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
           {puedeEditar && <Button variant="ghost" sm onClick={() => setShowToros(true)}><Icono nombre="toro" size={14} /> Toros</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirPorLote}><Icono nombre="hacienda" size={14} /> Cargar por lote</Button>}
+          {puedeEditar && <Button variant="ghost" sm onClick={abrirToro}><Icono nombre="toro" size={14} /> Entrada al toro</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirRealizado}><Icono nombre="servicios" size={14} /> Servicio realizado</Button>}
           {puedeEditar && <Button variant="verde" sm onClick={abrirDiagnostico}><Icono nombre="positivo" size={14} /> Diagnóstico</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirCandidatas}><Icono nombre="repasoResincro" size={14} /> Candidatas a repaso</Button>}

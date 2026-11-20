@@ -7,7 +7,7 @@ import { YearPills } from "../components/YearPills";
 import { Modal } from "../components/Modal";
 import { Field, Input, Select, Button, Badge } from "../components/Field";
 import { canEdit } from "../lib/permissions";
-import { today } from "../lib/dateUtils";
+import { today, daysBetween, formatDisplay } from "../lib/dateUtils";
 import { renombrarCaravana } from "../lib/vinculos";
 
 const TIPOS_PARTO = ["Normal", "Distócico", "Cesárea", "Gemelar", "Mortinato"];
@@ -30,6 +30,41 @@ const blank = {
 // duplicados de carga, no relacionado con el historial de partos).
 export function Pariciones({ animales, addAnimal, removeAnimal, updateAnimal, rol, abrirFicha, user }) {
   const [pariciones, addPar, updatePar, removePar] = useCollection("pariciones", { softDelete: true, auditar: true, user });
+  const [, addPesaje] = useCollection("pesajes");
+
+  // --- Destete en bloque ---
+  // El destete cierra el ciclo de la cría: queda la fecha y el peso en su
+  // ficha (y como pesada, para el historial de peso), y pasa a desmamante.
+  const [showDestete, setShowDestete] = useState(false);
+  const [desteteFecha, setDesteteFecha] = useState(today());
+  const [destetePesos, setDestetePesos] = useState({});
+  const [desteteIncluir, setDesteteIncluir] = useState(new Set());
+  const [desteteGuardando, setDesteteGuardando] = useState(false);
+  const criasSinDestete = animales
+    .filter((a) => ["Ternero", "Ternera"].includes(a.categoria) && !a.fechaDestete)
+    .sort((a, b) => (a.fechaNac || "").localeCompare(b.fechaNac || ""));
+  const abrirDestete = () => {
+    setDesteteFecha(today());
+    setDestetePesos({});
+    setDesteteIncluir(new Set(criasSinDestete.filter((a) => a.fechaNac && daysBetween(today(), a.fechaNac) >= 150).map((a) => a.id)));
+    setShowDestete(true);
+  };
+  const guardarDestete = async () => {
+    setDesteteGuardando(true);
+    for (const cria of criasSinDestete) {
+      if (!desteteIncluir.has(cria.id)) continue;
+      const peso = +destetePesos[cria.id] || "";
+      await updateAnimal(cria.id, {
+        ...cria,
+        fechaDestete: desteteFecha,
+        pesoDestete: peso,
+        categoria: cria.categoria === "Ternera" ? "Desmamante Hembra" : "Desmamante Macho",
+      });
+      if (peso) await addPesaje({ animalId: cria.id, caravana: cria.caravana, fecha: desteteFecha, peso, tipo: "destete" });
+    }
+    setDesteteGuardando(false);
+    setShowDestete(false);
+  };
   const puedeEditar = canEdit(rol, "pariciones");
 
   const [form, setForm] = useState(blank);
@@ -153,11 +188,54 @@ export function Pariciones({ animales, addAnimal, removeAnimal, updateAnimal, ro
       <div className="section-hdr">
         <h2><Icono nombre="partos" size={18} /> Pariciones</h2>
         {puedeEditar && (
+          <div className="flex" style={{ gap: 6 }}>
+          <Button variant="ghost" sm onClick={abrirDestete}><Icono nombre="hembra" size={14} /> Destete</Button>
           <Button variant="prim" sm onClick={() => (showForm ? cerrar() : setShowForm(true))}>
             {showForm ? <Icono nombre="cerrar" size={16} /> : <Icono nombre="agregar" size={16} />}
           </Button>
+          </div>
         )}
       </div>
+      {showDestete && (
+        <Modal onClose={() => setShowDestete(false)} title={<><Icono nombre="hembra" size={14} /> Destete</>} wide>
+          <div className="txt-muted mb" style={{ fontSize: 12 }}>
+            Vienen tildados los terneros de 5 meses o más. Pesarlos ahora te da el peso al destete y la ganancia diaria de cada uno.
+          </div>
+          <Field label={<><Icono nombre="fecha" size={14} /> Fecha del destete</>}>
+            <Input type="date" value={desteteFecha} onChange={(e) => setDesteteFecha(e.target.value)} />
+          </Field>
+          {criasSinDestete.length === 0 ? <div className="txt-muted mt">No hay terneros sin destetar.</div> : (
+            <div className="tbl-wrap mt" style={{ maxHeight: 380, overflowY: "auto" }}>
+              <table>
+                <thead><tr><th></th><th>Caravana</th><th>Madre</th><th>Edad</th><th>Peso nac.</th><th>Peso destete (kg)</th></tr></thead>
+                <tbody>
+                  {criasSinDestete.map((a) => {
+                    const incluido = desteteIncluir.has(a.id);
+                    const dias = a.fechaNac ? daysBetween(desteteFecha, a.fechaNac) : null;
+                    return (
+                      <tr key={a.id} style={{ opacity: incluido ? 1 : 0.5 }}>
+                        <td><input type="checkbox" checked={incluido} onChange={() => setDesteteIncluir((prev) => { const n = new Set(prev); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} /></td>
+                        <td><strong>{a.caravana}</strong> <span className="txt-muted">{a.categoria === "Ternera" ? "H" : "M"}</span></td>
+                        <td>{a.madreCaravana || "—"}</td>
+                        <td>{dias !== null ? `${Math.round(dias / 30.4)} m` : "—"}</td>
+                        <td>{a.pesoInicial ? `${a.pesoInicial} kg` : "—"}</td>
+                        <td><Input type="number" min="0" style={{ maxWidth: 90 }} disabled={!incluido} value={destetePesos[a.id] || ""} onChange={(e) => setDestetePesos((prev) => ({ ...prev, [a.id]: e.target.value }))} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex mt">
+            <Button variant="verde" onClick={guardarDestete} disabled={desteteGuardando || desteteIncluir.size === 0}>
+              <Icono nombre="guardar" size={14} /> {desteteGuardando ? "Guardando…" : `Destetar ${desteteIncluir.size} terneros`}
+            </Button>
+            <Button variant="ghost" sm onClick={() => setShowDestete(false)}>Cancelar</Button>
+          </div>
+          <div className="tb-meta mt">{formatDisplay(desteteFecha)} · los que no tildes siguen como terneros.</div>
+        </Modal>
+      )}
       <YearPills anos={anos} anio={anio} setAnio={setAnio} />
       <div className="grid3 mb">
         <div className="statbox" data-icon="🐣">

@@ -290,3 +290,57 @@ td.tabular, .tbl-wrap .tabular{font-variant-numeric:tabular-nums;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 .pulse{animation:pulse 2s infinite;}
 @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+
+/* ── Tablero reproductivo ─────────────────────────────────────────────────
+   Una sola tinta para los datos (Verde Monte sobre pista Crudo), la meta
+   como marca fina en Tinta, y el estado (al día / atención / urgente)
+   siempre con ícono + texto, nunca solo color. Tierra Colorada es el único
+   acento: el próximo hito de la campaña. */
+.tb-hero{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px;}
+@media(max-width:760px){.tb-hero{grid-template-columns:1fr;}}
+.tb-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:760px){.tb-grid2{grid-template-columns:1fr;}}
+.tb-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+@media(max-width:900px){.tb-kpis{grid-template-columns:1fr 1fr;}}
+.tb-card{background:var(--hueso);border:var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
+.tb-titulo{font-family:var(--font-display);font-size:18px;font-weight:500;color:var(--verde-monte);margin-bottom:4px;}
+.tb-sub{font-size:12.5px;color:rgba(21,21,15,.6);margin-bottom:14px;line-height:1.45;}
+.tb-hero-num{font-family:var(--font-ui);font-size:60px;line-height:1;font-weight:600;color:var(--tinta);letter-spacing:-.02em;}
+.tb-hero-num small{font-size:26px;font-weight:500;margin-left:2px;}
+.tb-frase{font-size:15px;line-height:1.45;color:var(--tinta);margin-top:12px;}
+.tb-frase strong{font-weight:700;}
+.tb-num{font-family:var(--font-ui);font-size:28px;line-height:1.1;font-weight:600;color:var(--tinta);}
+.tb-lbl{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(21,21,15,.55);}
+.tb-meta{font-size:11.5px;color:rgba(21,21,15,.55);margin-top:3px;}
+.tb-estado{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid currentColor;}
+.tb-estado.alDia{color:var(--al-dia);} .tb-estado.atencion{color:#8a6210;} .tb-estado.urgente{color:var(--urgente);} .tb-estado.pend{color:rgba(21,21,15,.5);}
+.tb-track{position:relative;height:12px;background:var(--crudo);border-radius:6px;margin-top:10px;}
+.tb-track.fino{height:8px;border-radius:4px;margin-top:6px;}
+.tb-fill{position:absolute;left:0;top:0;bottom:0;background:var(--verde-monte);border-radius:6px;transition:width .6s ease;}
+.tb-track.fino .tb-fill{border-radius:4px;}
+.tb-banda{position:absolute;top:-3px;bottom:-3px;background:rgba(143,168,96,.28);border-radius:2px;}
+.tb-tick{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--tinta);}
+.tb-escala{display:flex;justify-content:space-between;font-size:10.5px;color:rgba(21,21,15,.45);margin-top:5px;font-variant-numeric:tabular-nums;}
+.tb-fila{display:grid;grid-template-columns:minmax(90px,140px) 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(21,21,15,.08);}
+.tb-fila:last-child{border-bottom:none;}
+.tb-fila-nom{font-size:13px;font-weight:600;color:var(--tinta);}
+.tb-fila-nom span{display:block;font-size:11px;font-weight:400;color:rgba(21,21,15,.55);}
+.tb-fila-val{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:64px;}
+.tb-fila-val span{display:block;font-size:11px;font-weight:400;color:rgba(21,21,15,.55);}
+.tb-hito{background:var(--verde-monte);color:var(--hueso);border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:6px;}
+.tb-hito .cuenta{font-family:var(--font-ui);font-size:44px;font-weight:600;line-height:1;}
+.tb-hito .cuenta small{font-size:16px;font-weight:500;margin-left:6px;opacity:.8;}
+.tb-hito .que{font-size:16px;font-weight:600;}
+.tb-hito .detalle{font-size:12.5px;opacity:.75;}
+.tb-hito .acento{display:inline-block;width:28px;height:3px;background:var(--tierra);margin-bottom:4px;}
+.tb-linea{list-style:none;margin-top:10px;border-top:1px solid rgba(248,248,241,.18);padding-top:10px;display:flex;flex-direction:column;gap:6px;max-height:190px;overflow-y:auto;}
+.tb-linea li{display:grid;grid-template-columns:56px 1fr;gap:8px;font-size:12.5px;}
+.tb-linea li .f{font-variant-numeric:tabular-nums;opacity:.7;}
+.tb-linea li.hecho{opacity:.45;text-decoration:line-through;}
+.tb-chip{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border:var(--border-strong);border-radius:20px;margin:3px 4px 0 0;background:transparent;cursor:pointer;color:var(--tinta);font-family:var(--font-ui);}
+.tb-chip:hover{background:var(--crudo);}
+.tb-tarea{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid rgba(21,21,15,.08);}
+.tb-tarea:last-child{border-bottom:none;}
+.tb-tarea .n{font-size:20px;font-weight:700;min-width:34px;text-align:center;color:var(--urgente);font-variant-numeric:tabular-nums;}
+.tb-vacio{font-size:13px;color:rgba(21,21,15,.55);padding:6px 0;}
+.tb-progreso-datos{display:flex;align-items:center;gap:10px;font-size:12.5px;margin-top:4px;}

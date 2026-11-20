@@ -12,7 +12,7 @@ import { Inicio } from "./modules/Inicio";
 import { Rodeo } from "./modules/Rodeo";
 import { Cuenta } from "./modules/Cuenta";
 import { Potreros } from "./modules/potreros";
-import { Reportes } from "./modules/Reportes";
+import { ReportesHub } from "./modules/ReportesHub";
 import { FichaAnimal } from "./modules/FichaAnimal";
 
 // Cinco accesos, tal como pide el manual de marca: "móvil primero, barra
@@ -121,6 +121,7 @@ function AppShell({ rol, user, perfil, logout }) {
           <Inicio
             animales={animales} rol={rol} abrirFicha={abrirFicha}
             irA={(destino) => { setTab("rodeo"); setRodeoVista(destino); }}
+            irATablero={canAccessModule(rol, "reportes") ? () => setTab("reportes") : null}
           />
         )}
         {tab === "rodeo" && (
@@ -133,7 +134,7 @@ function AppShell({ rol, user, perfil, logout }) {
         )}
         {tab === "reportes" && (
           canAccessModule(rol, "reportes")
-            ? <Reportes animales={animales} rol={rol} />
+            ? <ReportesHub animales={animales} rol={rol} abrirFicha={abrirFicha} />
             : <div className="card txt-muted" style={{ padding: 16 }}>No tenés permiso para ver este módulo.</div>
         )}
         {tab === "cuenta" && <Cuenta rol={rol} user={user} animales={animales} logout={logout} />}

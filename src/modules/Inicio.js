@@ -2,13 +2,14 @@ import { useCollection } from "../hooks/useCollection";
 import { Icono } from "../components/Icon";
 import { today, daysBetween } from "../lib/dateUtils";
 import { fechaReferenciaGestacion, fechaPartoEstimada } from "../lib/gestacion";
+import { listarCampanias, calcularCampania, hitosCampania } from "../lib/indicadores";
 
 // "Inicio — dos cifras del rodeo, la alerta del día y tres cargas rápidas.
 // Nada más." (manual de marca, sección 07). Los tableros más ricos que tenía
 // la versión anterior del Dashboard (rodeo por lote, % de servicios, últimos
 // partos, sanidad reciente) viven ahora en Reportes, que ya cubre ese
 // terreno con más detalle y filtros por campaña/año.
-export function Inicio({ animales, rol, abrirFicha, irA }) {
+export function Inicio({ animales, rol, abrirFicha, irA, irATablero }) {
   const [iatfD] = useCollection("iatf");
   const [sanD] = useCollection("sanidad");
   const iatf = iatfD || [];
@@ -38,6 +39,10 @@ export function Inicio({ animales, rol, abrirFicha, irA }) {
     .map((i) => ({ ...i, fechaEst: fechaPartoEstimada(i) }))
     .filter((i) => i.fechaEst && daysBetween(i.fechaEst, hoy) * -1 <= 7 && daysBetween(i.fechaEst, hoy) * -1 >= -3);
 
+  const campania = listarCampanias(iatf)[0];
+  const camp = campania ? calcularCampania({ campania, iatf, animales, pariciones: [], bajas: [] }) : null;
+  const proximo = campania ? hitosCampania({ campania, iatf }).find((h) => h.dias >= 0) : null;
+
   const ultimaSanidad = [...sanidad].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))[0];
 
   return (
@@ -52,6 +57,31 @@ export function Inicio({ animales, rol, abrirFicha, irA }) {
           <div className="statbox-lbl">Preñadas</div>
         </div>
       </div>
+
+      {camp && camp.entoradas.length > 0 && (
+        <div className="card mb" style={{ padding: 14, cursor: irATablero ? "pointer" : "default" }} onClick={() => irATablero?.()}>
+          <div className="flex" style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div>
+              <div className="t-etiqueta" style={{ color: "rgba(21,21,15,.5)" }}>Campaña {campania}</div>
+              {camp.sinResultadoFinal.length === camp.entoradas.length ? (
+                <div style={{ fontSize: 26, fontWeight: 600, lineHeight: 1.1, marginTop: 4 }}>
+                  {camp.entoradas.length} <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(21,21,15,.6)" }}>vientres en servicio · esperando la primera ecografía</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 26, fontWeight: 600, lineHeight: 1.1, marginTop: 4 }}>
+                  {String(camp.prenez ?? 0).replace(".", ",")}% <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(21,21,15,.6)" }}>de preñez · {camp.prenadas.length} de {camp.entoradas.length}</span>
+                </div>
+              )}
+              {proximo && (
+                <div className="t-auxiliar" style={{ marginTop: 4 }}>
+                  {proximo.dias === 0 ? "Hoy" : proximo.dias === 1 ? "Mañana" : `En ${proximo.dias} días`}: {proximo.titulo.toLowerCase()} · {proximo.ronda}
+                </div>
+              )}
+            </div>
+            {irATablero && <Icono nombre="pasoSiguiente" size={18} />}
+          </div>
+        </div>
+      )}
 
       {partosProximos.length > 0 && (
         <div className="alert-box mb" onClick={() => irA("pariciones")} style={{ cursor: "pointer" }}>

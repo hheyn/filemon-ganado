@@ -212,7 +212,9 @@ export function hitosCampania({ campania, iatf, hoy = today() }) {
     agregar(primera("dia8"), "Retiro de dispositivo + eCG", ronda, n);
     const clave = tipo === "TE" ? primera("fechaTransferencia") : primera("dia10");
     agregar(clave, tipo === "TE" ? "Transferencia de embriones" : "Inseminación", ronda, n);
-    if (clave) agregar(addDays(clave, 30), "Ecografía (diagnóstico)", ronda, n);
+    // Fecha de ecografía fijada por el veterinario; si no hay, ~30 días post servicio.
+    const eco = primera("fechaEcografiaPrevista") || (clave ? addDays(clave, 30) : "");
+    agregar(eco, "Ecografía (diagnóstico)", ronda, n);
   });
   hitos.sort((a, b) => a.fecha.localeCompare(b.fecha));
   return hitos.map((h) => ({ ...h, dias: daysBetween(h.fecha, hoy) }));

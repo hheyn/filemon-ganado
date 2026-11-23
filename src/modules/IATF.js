@@ -263,6 +263,40 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
   };
   const marcadas = filasDiag.filter((r) => diagMarcas[r.id]?.resultado);
 
+  // --- Fechas de una ronda entera (cambios de calendario) ---
+  // Mover el día 0 recalcula el protocolo de las vacas todavía no servidas;
+  // las ya servidas conservan sus fechas reales (son historia), y a todas se
+  // les puede fijar la fecha de ecografía que decida el veterinario.
+  const [showFechas, setShowFechas] = useState(false);
+  const [fRonda, setFRonda] = useState("");
+  const [fDia0, setFDia0] = useState("");
+  const [fEco, setFEco] = useState("");
+  const [fGuardando, setFGuardando] = useState(false);
+  const rondasCamp = [...new Set(iatf.filter((i) => (i.campania || "") === campaniaDiag).map(rondaDe))];
+  const regsRonda = iatf.filter((i) => (i.campania || "") === campaniaDiag && rondaDe(i) === fRonda);
+  const pendRonda = regsRonda.filter((i) => i.protocolo !== "Si" && i.protocolo !== "No");
+  const tipoRonda = regsRonda[0]?.tipoServicio || "IATF";
+  const elegirRondaFechas = (r) => {
+    const rs = iatf.filter((i) => (i.campania || "") === campaniaDiag && rondaDe(i) === r);
+    setFRonda(r);
+    setFDia0(rs.map((i) => i.dia0).filter(Boolean).sort()[0] || "");
+    setFEco(rs.map((i) => i.fechaEcografiaPrevista).filter(Boolean).sort()[0] || "");
+  };
+  const abrirFechas = () => { elegirRondaFechas(rondasCamp[0] || ""); setShowFechas(true); };
+  const guardarFechas = async () => {
+    setFGuardando(true);
+    const protocoloNuevo = { dia0: fDia0, ...autocompletarProtocolo(fDia0, tipoRonda) };
+    delete protocoloNuevo.donante;
+    for (const r of regsRonda) {
+      const esPend = r.protocolo !== "Si" && r.protocolo !== "No";
+      const cambios = { fechaEcografiaPrevista: fEco || "" };
+      if (esPend && fDia0 && tipoRonda !== "Repaso Toro") Object.assign(cambios, protocoloNuevo);
+      await updateIatfDoc(r.id, cambios);
+    }
+    setFGuardando(false);
+    setShowFechas(false);
+  };
+
   // --- Entrada al toro (repaso) ---
   // Una vaca ya preñada en la campaña no entra al repaso (va con el toro pero
   // no se la está sirviendo); tampoco se duplica si ya tiene su repaso cargado.
@@ -671,6 +705,40 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         </Modal>
       )}
 
+      {showFechas && (
+        <Modal onClose={() => setShowFechas(false)} title={<><Icono nombre="fecha" size={14} /> Fechas de ronda — {campaniaDiag}</>}>
+          <Field label="Ronda">
+            <Select value={fRonda} onChange={(e) => elegirRondaFechas(e.target.value)} options={rondasCamp} />
+          </Field>
+          <div className="form-row mt">
+            <Field label={<><Icono nombre="fecha" size={14} /> {tipoRonda === "TE" ? "Día 0 (receptoras)" : "Día 0"}</>}>
+              <Input type="date" value={fDia0} onChange={(e) => setFDia0(e.target.value)} disabled={!pendRonda.length || tipoRonda === "Repaso Toro"} />
+            </Field>
+            <Field label={<><Icono nombre="fecha" size={14} /> Ecografía prevista</>}>
+              <Input type="date" value={fEco} onChange={(e) => setFEco(e.target.value)} />
+            </Field>
+          </div>
+          {fDia0 && pendRonda.length > 0 && tipoRonda !== "Repaso Toro" && (() => {
+            const p = autocompletarProtocolo(fDia0, tipoRonda);
+            return (
+              <div className="txt-muted" style={{ fontSize: 12.5 }}>
+                Retiro + eCG: <strong>{formatDisplay(p.dia8)}</strong> · {tipoRonda === "TE" ? "Transferencia" : "IATF"}: <strong>{formatDisplay(tipoRonda === "TE" ? p.fechaTransferencia : p.dia10)}</strong>
+              </div>
+            );
+          })()}
+          <div className="txt-muted mt" style={{ fontSize: 12 }}>
+            {pendRonda.length} vacas todavía no servidas toman las fechas nuevas.
+            {regsRonda.length - pendRonda.length > 0 && ` ${regsRonda.length - pendRonda.length} ya servidas o fuera del protocolo conservan sus fechas reales (solo cambia la ecografía).`}
+          </div>
+          <div className="flex mt">
+            <Button variant="verde" onClick={guardarFechas} disabled={fGuardando || !fRonda}>
+              <Icono nombre="guardar" size={14} /> {fGuardando ? "Guardando…" : "Guardar fechas"}
+            </Button>
+            <Button variant="ghost" sm onClick={() => setShowFechas(false)}>Cancelar</Button>
+          </div>
+        </Modal>
+      )}
+
       {showToro && (
         <Modal onClose={() => setShowToro(false)} title={<><Icono nombre="toro" size={14} /> Entrada al toro — {campaniaDiag}</>} wide>
           <div className="txt-muted mb" style={{ fontSize: 12 }}>
@@ -926,6 +994,7 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
         <div className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
           {puedeEditar && <Button variant="ghost" sm onClick={() => setShowToros(true)}><Icono nombre="toro" size={14} /> Toros</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirPorLote}><Icono nombre="hacienda" size={14} /> Cargar por lote</Button>}
+          {puedeEditar && <Button variant="ghost" sm onClick={abrirFechas}><Icono nombre="fecha" size={14} /> Fechas de ronda</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirToro}><Icono nombre="toro" size={14} /> Entrada al toro</Button>}
           {puedeEditar && <Button variant="ghost" sm onClick={abrirRealizado}><Icono nombre="servicios" size={14} /> Servicio realizado</Button>}
           {puedeEditar && <Button variant="verde" sm onClick={abrirDiagnostico}><Icono nombre="positivo" size={14} /> Diagnóstico</Button>}

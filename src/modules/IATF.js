@@ -155,13 +155,38 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
     .filter((i) => campaniaF === "Todas" || (i.campania || "2025") === campaniaF);
   const rows = sortFn(rowsF);
 
-  // --- Estadísticas (mismas fórmulas que la app legacy) ---
-  const aptas = rows.filter((i) => i.apta === "Apta").length;
-  const inseminadas = rows.filter((i) => i.protocolo === "Si" && i.apta === "Apta").length;
-  const aptasNoIatf = rows.filter((i) => i.apta === "Apta" && i.protocolo === "No").length;
-  const pend = rows.filter((i) => i.resultado === "⏳").length;
-  const prenIatf = rows.filter((i) => i.resultado === "✅" && i.origenPreniez === "IATF").length;
-  const prenRepaso = rows.filter((i) => i.resultado === "✅" && i.origenPreniez === "Repaso").length;
+  // --- Resumen por VACA (no por registro: cada ronda es un registro aparte,
+  // así que una vaca en IATF-1 e IATF-2 aparece dos veces en la tabla) ---
+  const vacasRows = [...new Set(rows.map((r) => r.caravana))];
+  const regsDe = (c) => rows.filter((r) => r.caravana === c);
+  const entoradasRows = vacasRows.filter((c) => regsDe(c).some((r) => r.protocolo !== "No" || r.resultado === "✅"));
+  const prenadasRows = entoradasRows.filter((c) => regsDe(c).some((r) => r.resultado === "✅"));
+  const resumenVacas = {
+    total: vacasRows.length,
+    entoradas: entoradasRows.length,
+    fuera: vacasRows.length - entoradasRows.length,
+    prenadas: prenadasRows.length,
+    porcentaje: entoradasRows.length ? Math.round((prenadasRows.length / entoradasRows.length) * 100) : 0,
+    sinResultado: entoradasRows.filter((c) => !prenadasRows.includes(c) && regsDe(c).some((r) => r.protocolo !== "No" && r.resultado === "⏳")).length,
+  };
+  const resumenRondas = [...new Set(rows.map((r) => `${r.campania || "2025"}|${rondaDe(r)}`))]
+    .map((k) => {
+      const [camp, ronda] = k.split("|");
+      const rs = rows.filter((r) => (r.campania || "2025") === camp && rondaDe(r) === ronda);
+      const servidas = rs.filter((r) => r.protocolo === "Si");
+      return {
+        ronda: campaniaF === "Todas" ? `${camp} · ${ronda}` : ronda,
+        tipo: tipoDe(rs[0]),
+        inicio: rs.map((r) => r.dia0).filter(Boolean).sort()[0] || "",
+        vacas: new Set(rs.map((r) => r.caravana)).size,
+        salieron: rs.filter((r) => r.protocolo === "No").length,
+        servidas: servidas.length,
+        porServir: rs.filter((r) => r.protocolo !== "Si" && r.protocolo !== "No").length,
+        diagnosticadas: servidas.filter((r) => r.resultado !== "⏳").length,
+        prenadas: servidas.filter((r) => r.resultado === "✅").length,
+      };
+    })
+    .sort((a, b) => (a.inicio || "9").localeCompare(b.inicio || "9"));
 
   // --- Catálogo de toros ---
   const agregarToro = async () => {
@@ -1046,15 +1071,34 @@ export function IATF({ animales, updateAnimal, rol, abrirFicha, user }) {
       </div>
 
       <div className="grid4 mb">
-        <div className="statbox" data-icon="🐄"><div className="statbox-num">{rows.length}</div><div className="statbox-lbl">Evaluadas GDR</div></div>
-        <div className="statbox cielo" data-icon="✅"><div className="statbox-num">{aptas}</div><div className="statbox-lbl">Aptas GDR</div></div>
-        <div className="statbox paja" data-icon="❌"><div className="statbox-num">{aptasNoIatf}</div><div className="statbox-lbl">Aptas sin IATF</div></div>
-        <div className="statbox cielo" data-icon="💉"><div className="statbox-num">{inseminadas}</div><div className="statbox-lbl">Inseminadas</div></div>
-        <div className="statbox verde" data-icon="🧬"><div className="statbox-num">{prenIatf}</div><div className="statbox-lbl">Preñ. IATF</div></div>
-        <div className="statbox paja" data-icon="🐂"><div className="statbox-num">{prenRepaso}</div><div className="statbox-lbl">Preñ. Repaso</div></div>
-        <div className="statbox paja" data-icon="⏳"><div className="statbox-num">{pend}</div><div className="statbox-lbl">Pendientes</div></div>
-        <div className="statbox paja" data-icon="📊"><div className="statbox-num">{inseminadas > 0 ? ((prenIatf / inseminadas) * 100).toFixed(0) : 0}%</div><div className="statbox-lbl">% Preñez IATF</div></div>
-        <div className="statbox cielo" data-icon="📊"><div className="statbox-num">{aptas > 0 ? (((prenIatf + prenRepaso) / aptas) * 100).toFixed(0) : 0}%</div><div className="statbox-lbl">% Total preñez</div></div>
+        <div className="statbox"><div className="statbox-num">{resumenVacas.total}</div><div className="statbox-lbl">Vacas en el programa</div></div>
+        <div className="statbox"><div className="statbox-num">{resumenVacas.entoradas}</div><div className="statbox-lbl">Entoradas</div><div className="statbox-sub">{resumenVacas.fuera ? `${resumenVacas.fuera} fuera del servicio` : "todas en servicio"}</div></div>
+        <div className="statbox verde"><div className="statbox-num">{resumenVacas.prenadas}</div><div className="statbox-lbl">Preñadas</div>{resumenVacas.prenadas > 0 && <div className="statbox-sub">{resumenVacas.porcentaje}% de las entoradas</div>}</div>
+        <div className="statbox paja"><div className="statbox-num">{resumenVacas.sinResultado}</div><div className="statbox-lbl">Sin resultado todavía</div></div>
+      </div>
+
+      <div className="card mb" style={{ padding: 12 }}>
+        <div className="tbl-wrap">
+          <table>
+            <thead><tr><th>Ronda</th><th>Vacas</th><th>No aptas / salieron</th><th>Servidas</th><th>Por servir</th><th>Diagnosticadas</th><th>Preñadas</th></tr></thead>
+            <tbody>
+              {resumenRondas.map((r) => (
+                <tr key={r.ronda}>
+                  <td><Badge tone="morado">{r.ronda}</Badge> <span className="txt-muted" style={{ fontSize: 11 }}>{r.tipo}</span></td>
+                  <td><strong>{r.vacas}</strong></td>
+                  <td>{r.salieron || "—"}</td>
+                  <td>{r.servidas || "—"}</td>
+                  <td>{r.porServir || "—"}</td>
+                  <td>{r.diagnosticadas || "—"}</td>
+                  <td>{r.prenadas ? <strong>{r.prenadas}{r.diagnosticadas ? ` (${Math.round((r.prenadas / r.diagnosticadas) * 100)}%)` : ""}</strong> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="txt-muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+          Arriba se cuentan vacas: una vaca que pasa de una ronda a otra cuenta una sola vez. En la tabla, cada ronda cuenta sus propias vacas.
+        </div>
       </div>
 
       <div className="card">
